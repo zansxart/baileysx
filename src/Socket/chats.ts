@@ -38,11 +38,13 @@ import {
 	ensureLTHashStateVersion,
 	extractSyncdPatches,
 	generateProfilePicture,
+	getContentType,
 	getHistoryMsg,
 	isAppStateSyncIrrecoverable,
 	isMissingKeyError,
 	MAX_SYNC_ATTEMPTS,
 	newLTHashState,
+	normalizeMessageContent,
 	processSyncAction
 } from '../Utils'
 import { makeMutex } from '../Utils/make-mutex'
@@ -58,6 +60,7 @@ import {
 	isPnUser,
 	jidDecode,
 	jidNormalizedUser,
+	lidToJid,
 	reduceBinaryNodeToDictionary,
 	S_WHATSAPP_NET
 } from '../WABinary'
@@ -136,6 +139,11 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			stdTTL: DEFAULT_CACHE_TTLS.MSG_RETRY, // 1 hour
 			useClones: false
 		}) as CacheStore)
+
+	const receivedMessageDedupCache = new NodeCache<string>({
+		stdTTL: 3 * 60, // 3 minutes
+		useClones: false
+	})
 
 	/** helper function to fetch the given app state sync key */
 	const getAppStateSyncKey = async (keyId: string) => {
@@ -1193,8 +1201,71 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		await Promise.all([fetchProps(), fetchBlocklist(), fetchPrivacySettings()])
 	}
 
-	const upsertMessage = ev.createBufferedFunction(async (msg: WAMessage, type: MessageUpsertType) => {
-		ev.emit('messages.upsert', { messages: [msg], type })
+	const canonicalizeUserJid = (jid: string | null | undefined): string | undefined => {
+		const cleanJid = jid || undefined
+		if (!cleanJid) {
+			return undefined
+		}
+
+		if (isLidUser(cleanJid)) {
+			return lidToJid(cleanJid)
+		}
+
+		return cleanJid
+	}
+
+	const extractStanzaId = (msg: WAMessage) => {
+		const topLevelStanzaId = (msg as any).messageContextInfo?.stanzaId
+		if (topLevelStanzaId) {
+			return topLevelStanzaId
+		}
+
+		const messageContextStanzaId = msg.message?.messageContextInfo as any
+		if (messageContextStanzaId?.stanzaId) {
+			return messageContextStanzaId.stanzaId
+		}
+
+		const normalizedContent = normalizeMessageContent(msg.message)
+		const contentType = normalizedContent ? getContentType(normalizedContent) : undefined
+		const contentContextStanzaId = contentType
+			? (normalizedContent as any)[contentType]?.contextInfo?.stanzaId
+			: undefined
+		return contentContextStanzaId
+	}
+
+	const buildMessageDedupKeys = (msg: WAMessage) => {
+		const remoteJid = canonicalizeUserJid(msg.key.remoteJid)
+		const participant = canonicalizeUserJid(msg.key.participant)
+		const stanzaId = extractStanzaId(msg)
+		const primaryKey = [remoteJid, participant, msg.key.id, msg.key.fromMe ? '1' : '0', stanzaId || ''].join('|')
+		const keys = [primaryKey]
+		// fallback alias key to collapse LID->PN duplicate deliveries for the same incoming user message ID
+		const rJid = msg.key.remoteJid || undefined
+		if (!msg.key.fromMe && (isPnUser(rJid) || isLidUser(rJid))) {
+			keys.push(`incoming-user-id|${msg.key.id}|${stanzaId || ''}`)
+		}
+
+		return keys
+	}
+
+	const getDedupState = (msg: WAMessage) =>
+		msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT
+			? 'ciphertext'
+			: 'final'
+
+	const upsertMessage = ev.createBufferedFunction(async (msg: WAMessage, type: MessageUpsertType, extraEventData?: any) => {
+		const dedupKeys = buildMessageDedupKeys(msg)
+		const dedupState = getDedupState(msg)
+		const previousDedupState = dedupKeys
+			.map(key => receivedMessageDedupCache.get(key))
+			.find(state => !!state)
+
+		if (previousDedupState === 'final' || (previousDedupState === 'ciphertext' && dedupState === 'ciphertext')) {
+			logger.debug({ dedupKeys, messageId: msg.key.id, type, dedupState, previousDedupState }, 'skipping duplicate messages.upsert')
+			return
+		}
+
+		ev.emit('messages.upsert', { messages: [msg], type, ...(extraEventData || {}) })
 
 		if (!!msg.pushName) {
 			let jid = msg.key.fromMe ? authState.creds.me!.id : msg.key.participant || msg.key.remoteJid
@@ -1324,6 +1395,10 @@ export const makeChatsSocket = (config: SocketConfig) => {
 		if (msg.message?.protocolMessage?.appStateSyncKeyShare && syncState === SyncState.Syncing) {
 			logger.info('App state sync key arrived, triggering app state sync')
 			await doAppStateSync()
+		}
+
+		for (const key of dedupKeys) {
+			receivedMessageDedupCache.set(key, dedupState)
 		}
 	})
 
@@ -1466,6 +1541,10 @@ export const makeChatsSocket = (config: SocketConfig) => {
 
 		if (!config.placeholderResendCache && placeholderResendCache.close) {
 			placeholderResendCache.close()
+		}
+
+		if (receivedMessageDedupCache.close) {
+			receivedMessageDedupCache.close()
 		}
 
 		syncState = SyncState.Connecting
