@@ -867,7 +867,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					devices.push({
 						user,
 						device: 0,
-						jid: jidEncode(user, targetUserServer, 0) // rajeh, todo: this entire logic is convoluted and weird.
+						jid: jidEncode(user, targetUserServer, 0) // todo: this entire logic is convoluted and weird.
 					})
 
 					if (user !== ownUser) {
@@ -1409,6 +1409,22 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		},
 		sendMessage: async (jid: string, content: AnyMessageContent, options: MiscMessageGenerationOptions = {}) => {
 			const userJid = authState.creds.me!.id
+			const mentionAll = (typeof content === 'object' && 'mentionAll' in content && (content as any).mentionAll) || options.mentionAll
+			if (mentionAll && isJidGroup(jid)) {
+				try {
+					const meta = await groupMetadata(jid)
+					if (meta?.participants) {
+						if (typeof content === 'string') {
+							content = { text: content } as any
+						}
+						const anyContent = content as any
+						anyContent.contextInfo = anyContent.contextInfo || {}
+						anyContent.contextInfo.mentionedJid = meta.participants.map(p => p.id)
+					}
+				} catch (err) {
+					logger.error({ err, jid }, 'failed to get group metadata for mentionAll')
+				}
+			}
 			if (
 				typeof content === 'object' &&
 				'disappearingMessagesInChat' in content &&
@@ -1478,17 +1494,17 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					messageId: generateMessageIDV2(sock.user?.id),
 					...options
 				})
-				const isEventMsg = 'event' in content && !!content.event
-				const isDeleteMsg = 'delete' in content && !!content.delete
-				const isEditMsg = 'edit' in content && !!content.edit
-				const isPinMsg = 'pin' in content && !!content.pin
-				const isPollMessage = 'poll' in content && !!content.poll
+				const isEventMsg = 'event' in content && !!(content as any).event
+				const isDeleteMsg = 'delete' in content && !!(content as any).delete
+				const isEditMsg = 'edit' in content && !!(content as any).edit
+				const isPinMsg = 'pin' in content && !!(content as any).pin
+				const isPollMessage = 'poll' in content && !!(content as any).poll
 				const additionalAttributes: BinaryNodeAttributes = {}
 				const additionalNodes: BinaryNode[] = []
 				// required for delete
 				if (isDeleteMsg) {
 					// if the chat is a group, and I am not the author, then delete the message as an admin
-					if (isJidGroup(content.delete?.remoteJid as string) && !content.delete?.fromMe) {
+					if (isJidGroup((content as any).delete?.remoteJid as string) && !(content as any).delete?.fromMe) {
 						additionalAttributes.edit = '8'
 					} else {
 						additionalAttributes.edit = '7'

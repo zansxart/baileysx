@@ -72,6 +72,9 @@ export type BaileysEventMap = {
 	/** message was reacted to. If reaction was removed -- then "reaction.text" will be falsey */
 	'messages.reaction': { key: WAMessageKey; reaction: proto.IReaction }[]
 
+	'polls.vote': { pollId: string; voter: string; vote: proto.Message.IPollVoteMessage; timestamp: number }
+
+
 	'message-receipt.update': MessageUserReceiptUpdate[]
 
 	'groups.upsert': GroupMetadata[]

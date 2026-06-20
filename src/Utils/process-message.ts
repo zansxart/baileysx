@@ -48,6 +48,7 @@ type ProcessMessageContext = {
 	signalRepository: SignalRepositoryWithLIDStore
 	getMessage: SocketConfig['getMessage']
 	upsertMessage?: (msg: WAMessage, type: MessageUpsertType, extraEventData?: any) => Promise<void>
+	bypassViewOnce?: boolean
 }
 
 const REAL_MSG_STUB_TYPES = new Set([
@@ -118,7 +119,30 @@ async function storeTcTokensFromHistorySync(
 }
 
 /** Cleans a received message to further processing */
-export const cleanMessage = (message: WAMessage, meId: string, meLid: string) => {
+export const cleanMessage = (message: WAMessage, meId: string, meLid: string, bypassViewOnce?: boolean) => {
+	// bypass view once messages
+	if (bypassViewOnce) {
+		if (message.message?.viewOnceMessage?.message) {
+			message.message = message.message.viewOnceMessage.message
+			const type = getContentType(message.message)
+			if (type && message.message[type]) {
+				(message.message[type] as any).viewOnce = false
+			}
+		} else if (message.message?.viewOnceMessageV2?.message) {
+			message.message = message.message.viewOnceMessageV2.message
+			const type = getContentType(message.message)
+			if (type && message.message[type]) {
+				(message.message[type] as any).viewOnce = false
+			}
+		} else if (message.message?.viewOnceMessageV2Extension?.message) {
+			message.message = message.message.viewOnceMessageV2Extension.message
+			const type = getContentType(message.message)
+			if (type && message.message[type]) {
+				(message.message[type] as any).viewOnce = false
+			}
+		}
+	}
+
 	// ensure remoteJid and participant doesn't have device or agent in it
 	if (isHostedPnUser(message.key.remoteJid!) || isHostedLidUser(message.key.remoteJid!)) {
 		message.key.remoteJid = jidEncode(
@@ -304,7 +328,8 @@ const processMessage = async (
 		logger,
 		options,
 		getMessage,
-		upsertMessage
+		upsertMessage,
+		bypassViewOnce
 	}: ProcessMessageContext
 ) => {
 	const meId = creds.me!.id
@@ -502,7 +527,7 @@ const processMessage = async (
 							logger?.debug({ msgId, requestId: response.stanzaId }, 'received placeholder resend')
 
 							if (typeof upsertMessage === 'function') {
-								cleanMessage(finalMsg, meId, creds.me!.lid || '')
+								cleanMessage(finalMsg, meId, creds.me!.lid || '', bypassViewOnce)
 								Promise.resolve(upsertMessage(finalMsg, 'notify', {
 									requestId: response.stanzaId
 								})).catch(error => {
@@ -746,55 +771,68 @@ const processMessage = async (
 				emitGroupRequestJoin(participant, action, method)
 				break
 		}
-	} /*  else if(content?.pollUpdateMessage) {
+	} else if (content?.pollUpdateMessage) {
 		const creationMsgKey = content.pollUpdateMessage.pollCreationMessageKey!
 		// we need to fetch the poll creation message to get the poll enc key
 		// TODO: make standalone, remove getMessage reference
 		// TODO: Remove entirely
-		const pollMsg = await getMessage(creationMsgKey)
-		if(pollMsg) {
-			const meIdNormalised = jidNormalizedUser(meId)
-			const pollCreatorJid = getKeyAuthor(creationMsgKey, meIdNormalised)
-			const voterJid = getKeyAuthor(message.key, meIdNormalised)
-			const pollEncKey = pollMsg.messageContextInfo?.messageSecret!
+		if (getMessage) {
+			const pollMsg = await getMessage(creationMsgKey)
+			if (pollMsg) {
+				const meIdNormalised = jidNormalizedUser(meId)
+				const pollCreatorJid = getKeyAuthor(creationMsgKey, meIdNormalised)
+				const voterJid = getKeyAuthor(message.key, meIdNormalised)
+				const pollEncKey = pollMsg.messageContextInfo?.messageSecret!
 
-			try {
-				const voteMsg = decryptPollVote(
-					content.pollUpdateMessage.vote!,
-					{
-						pollEncKey,
-						pollCreatorJid,
-						pollMsgId: creationMsgKey.id!,
-						voterJid,
-					}
-				)
-				ev.emit('messages.update', [
-					{
-						key: creationMsgKey,
-						update: {
-							pollUpdates: [
-								{
-									pollUpdateMessageKey: message.key,
-									vote: voteMsg,
-									senderTimestampMs: (content.pollUpdateMessage.senderTimestampMs! as Long).toNumber(),
-								}
-							]
+				try {
+					const voteMsg = decryptPollVote(
+						content.pollUpdateMessage.vote!,
+						{
+							pollEncKey,
+							pollCreatorJid,
+							pollMsgId: creationMsgKey.id!,
+							voterJid,
 						}
-					}
-				])
-			} catch(err) {
+					)
+					ev.emit('messages.update', [
+						{
+							key: creationMsgKey,
+							update: {
+								pollUpdates: [
+									{
+										pollUpdateMessageKey: message.key,
+										vote: voteMsg,
+										senderTimestampMs: (content.pollUpdateMessage.senderTimestampMs as any)?.toNumber ? (content.pollUpdateMessage.senderTimestampMs as any).toNumber() : Number(content.pollUpdateMessage.senderTimestampMs),
+									}
+								]
+							}
+						}
+					])
+					ev.emit('polls.vote', {
+						pollId: creationMsgKey.id!,
+						voter: voterJid,
+						vote: voteMsg,
+						timestamp: (content.pollUpdateMessage.senderTimestampMs as any)?.toNumber ? (content.pollUpdateMessage.senderTimestampMs as any).toNumber() : Number(content.pollUpdateMessage.senderTimestampMs)
+					})
+				} catch (err) {
+					logger?.warn(
+						{ err, creationMsgKey },
+						'failed to decrypt poll vote'
+					)
+				}
+			} else {
 				logger?.warn(
-					{ err, creationMsgKey },
-					'failed to decrypt poll vote'
+					{ creationMsgKey },
+					'poll creation message not found, cannot decrypt update'
 				)
 			}
 		} else {
 			logger?.warn(
 				{ creationMsgKey },
-				'poll creation message not found, cannot decrypt update'
+				'getMessage not provided, cannot decrypt poll update'
 			)
 		}
-		} */
+	}
 
 	if (Object.keys(chat).length > 1) {
 		ev.emit('chats.update', [chat])

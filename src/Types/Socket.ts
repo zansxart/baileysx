@@ -109,6 +109,12 @@ export type SocketConfig = {
 	/** Enable recent message caching for retry handling */
 	enableRecentMessageCache: boolean
 
+	/** Bypass view once messages and unpack them natively */
+	bypassViewOnce?: boolean
+
+	/** Automatically mark received messages as read (blue tick) */
+	autoReadMessages?: boolean
+
 	/**
 	 * Returns if a jid should be ignored,
 	 * no event for that jid will be triggered.

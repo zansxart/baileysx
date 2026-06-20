@@ -1772,6 +1772,8 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							if (isLidUser(msg.key.remoteJid!) || isLidUser(msg.key.remoteJidAlt)) {
 								participant = author // TODO: investigate sending receipts to LIDs and not PNs
 							}
+						} else if (config.autoReadMessages) {
+							type = 'read'
 						} else if (!sendActiveReceipts) {
 							type = 'inactive'
 						}
@@ -1792,7 +1794,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 					}
 				}
 
-				cleanMessage(msg, authState.creds.me!.id, authState.creds.me!.lid!)
+				cleanMessage(msg, authState.creds.me!.id, authState.creds.me!.lid!, config.bypassViewOnce)
 
 				await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
 			})

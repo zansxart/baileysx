@@ -312,7 +312,7 @@ export type AnyRegularMessageContent = (
 ) &
 	ViewOnce
 
-export type AnyMessageContent =
+export type AnyMessageContent = (
 	| AnyRegularMessageContent
 	| {
 			forward: WAMessage
@@ -331,6 +331,9 @@ export type AnyMessageContent =
 	| {
 			groupStatusMessage: any
 	  }
+) & {
+	mentionAll?: boolean
+}
 
 
 export type GroupMetadataParticipants = Pick<GroupMetadata, 'participants'>
@@ -355,6 +358,8 @@ export type MessageRelayOptions = MinimalRelayOptions & {
 }
 
 export type MiscMessageGenerationOptions = MinimalRelayOptions & {
+	/** option to tag all group participants automatically */
+	mentionAll?: boolean
 	/** optional, if you want to manually set the timestamp of the message */
 	timestamp?: Date
 	/** the message you want to quote */

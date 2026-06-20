@@ -771,24 +771,24 @@ export const generateWAMessageContent = async (
 	}
 
 	if (
-		(hasOptionalProperty(message, 'mentions') && message.mentions?.length) ||
-		(hasOptionalProperty(message, 'mentionAll') && message.mentionAll)
+		(hasOptionalProperty(message, 'mentions') && (message as any).mentions?.length) ||
+		(hasOptionalProperty(message, 'mentionAll') && (message as any).mentionAll)
 	) {
 		const messageType = Object.keys(m)[0]! as Extract<keyof proto.IMessage, MessageWithContextInfo>
 		const key = m[messageType]
 		if (key && 'contextInfo' in key) {
 			key.contextInfo = key.contextInfo || {}
-			if (message.mentions?.length) {
-				key.contextInfo.mentionedJid = message.mentions
+			if ((message as any).mentions?.length) {
+				key.contextInfo.mentionedJid = (message as any).mentions
 			}
 
-			if (message.mentionAll) {
+			if ((message as any).mentionAll) {
 				key.contextInfo.nonJidMentions = 1
 			}
 		} else if (key!) {
 			key.contextInfo = {
-				mentionedJid: message.mentions,
-				nonJidMentions: message.mentionAll ? 1 : 0
+				mentionedJid: (message as any).mentions,
+				nonJidMentions: (message as any).mentionAll ? 1 : 0
 			}
 		}
 	}

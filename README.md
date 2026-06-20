@@ -28,6 +28,19 @@ Dibandingkan dengan versi resmi Baileys, **baileysx** hadir dengan peningkatan b
 5. **Notifikasi Token Privasi (`tcToken`)**:
    - Memancarkan event `chats.update` yang membawa data token privasi terbaru segera setelah diterima dari jaringan WhatsApp.
 
+6. **Bypass Pesan Sekali Lihat (Anti-ViewOnce) Opsional**:
+   - Secara otomatis membongkar pembungkus pesan sekali lihat (`viewOnceMessage`, `viewOnceMessageV2`, dan `viewOnceMessageV2Extension`) langsung di layer soket dan merubahnya menjadi media biasa.
+   - Fitur ini dinonaktifkan secara bawaan demi kompatibilitas mundur. Cukup aktifkan dengan menambahkan properti `bypassViewOnce: true` saat inisialisasi soket.
+
+7. **Group Mention All (Tag Semua Anggota Grup)**:
+   - Tambahkan `mentionAll: true` pada opsi/konten pengiriman pesan (`sendMessage`) di grup untuk secara otomatis men-tag seluruh peserta grup tanpa harus mendefinisikan array JID manual.
+
+8. **Auto-Read Messages (Centang Biru Otomatis)**:
+   - Fitur opsional untuk mengirim status laporan dibaca (`read`) secara otomatis sesaat setelah pesan masuk diterima. Cukup aktifkan dengan menambahkan properti `autoReadMessages: true` saat inisialisasi soket.
+
+9. **Native Event `polls.vote`**:
+   - Memproses dekripsi jajak pendapat secara native langsung di dalam layer soket. Memancarkan event `'polls.vote'` dengan data lengkap: `pollId`, `voter`, `vote` terdekripsi, dan `timestamp`.
+
 ---
 
 ## 📦 Cara Instalasi
@@ -142,6 +155,41 @@ await sock.sendMessage(jid, {
         image: { url: './gambar_cerita.jpg' },
         caption: 'Cerita grup harian kami!'
     }
+})
+```
+
+---
+
+## ⚙️ Panduan Fitur Tambahan baileysx
+
+### 1. Group Mention All (Tag Semua Anggota Grup)
+Anda dapat secara otomatis men-tag seluruh anggota grup dengan menyematkan parameter `mentionAll: true` baik di opsi pesan maupun konten pesan:
+```typescript
+// Melalui opsi pesan (Options)
+await sock.sendMessage(groupJid, { text: "Halo semuanya!" }, { mentionAll: true })
+
+// Atau langsung dalam konten pesan
+await sock.sendMessage(groupJid, { text: "Pengumuman penting!", mentionAll: true })
+```
+
+### 2. Auto-Read Messages (Centang Biru Otomatis)
+Aktifkan centang biru otomatis untuk semua pesan masuk (kecuali pesan dari diri sendiri atau pesan bertipe peer) saat menginisialisasi koneksi soket:
+```typescript
+const sock = makeWASocket({
+    auth: state,
+    autoReadMessages: true // Aktifkan centang biru otomatis
+})
+```
+
+### 3. Native Event `polls.vote` (Dekripsi Polling)
+Dapatkan notifikasi real-time saat pengguna memilih/memilih di polling:
+```typescript
+sock.ev.on('polls.vote', (voteUpdate) => {
+    console.log('Ada suara masuk pada polling!')
+    console.log('ID Polling:', voteUpdate.pollId)
+    console.log('Pemilih:', voteUpdate.voter)
+    console.log('Pilihan terdekripsi:', voteUpdate.vote)
+    console.log('Waktu memilih:', voteUpdate.timestamp)
 })
 ```
 
