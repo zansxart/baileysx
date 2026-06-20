@@ -1,7 +1,7 @@
 {
   "name": "baileysx",
   "type": "module",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A WebSockets library for interacting with WhatsApp Web (custom fork by zansxart)",
   "keywords": [
     "whatsapp",
