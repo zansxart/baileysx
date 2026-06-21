@@ -203,7 +203,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			await placeholderResendCache.set(messageKey?.id!, msgData || true)
 		}
 
-		await delay(100)
+		await delay(2000)
 
 		if (!(await placeholderResendCache.get(messageKey?.id!))) {
 			logger.debug({ messageKey }, 'message received while resend requested')
@@ -221,10 +221,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 
 		setTimeout(async () => {
 			if (await placeholderResendCache.get(messageKey?.id!)) {
-				logger.debug({ messageKey }, 'PDO message without response after 5 seconds. Phone possibly offline')
+				logger.debug({ messageKey }, 'PDO message without response after 8 seconds. Phone possibly offline')
 				await placeholderResendCache.del(messageKey?.id!)
 			}
-		}, 5_000)
+		}, 8_000)
 
 		return sendPeerDataOperationMessage(pdoMessage)
 	}

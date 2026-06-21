@@ -1543,10 +1543,6 @@ export const makeChatsSocket = (config: SocketConfig) => {
 			placeholderResendCache.close()
 		}
 
-		if (receivedMessageDedupCache.close) {
-			receivedMessageDedupCache.close()
-		}
-
 		syncState = SyncState.Connecting
 		privacySettings = undefined
 	})
