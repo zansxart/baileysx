@@ -112,8 +112,7 @@ export type SocketConfig = {
 	/** Bypass view once messages and unpack them natively */
 	bypassViewOnce?: boolean
 
-	/** Automatically mark received messages as read (blue tick) */
-	autoReadMessages?: boolean
+
 
 	/**
 	 * Returns if a jid should be ignored,

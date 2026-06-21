@@ -85,7 +85,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	enableAutoSessionRecreation: true,
 	enableRecentMessageCache: true,
 	bypassViewOnce: false,
-	autoReadMessages: false,
+
 
 	options: {},
 	appStateMacVerification: {

@@ -1772,8 +1772,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							if (isLidUser(msg.key.remoteJid!) || isLidUser(msg.key.remoteJidAlt)) {
 								participant = author // TODO: investigate sending receipts to LIDs and not PNs
 							}
-						} else if (config.autoReadMessages) {
-							type = 'read'
 						} else if (!sendActiveReceipts) {
 							type = 'inactive'
 						}
