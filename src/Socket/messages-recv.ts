@@ -1785,6 +1785,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							const jid = jidNormalizedUser(msg.key.remoteJid!)
 							await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync') // TODO: investigate
 						}
+						await sendMessageAck(node)
 					} else {
 						acked = true
 						await sendMessageAck(node)
