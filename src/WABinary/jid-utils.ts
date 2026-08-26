@@ -148,10 +148,19 @@ export const jidToLid = (jid: string | undefined): string | undefined => {
 const lidPnMap = new Map<string, string>()
 const pnLidMap = new Map<string, string>()
 
+// LID dan PN adalah ruang nomor yang berbeda — mapping dengan digit identik pasti
+// palsu (hasil cross-product JID matcher di bot) dan bikin relayMessage mengirim
+// ke LID yang tidak ada ("Pengguna tak dikenal", pesan tidak sampai penerima).
+const isBogusSameDigitMapping = (lidUser: string, pnUser: string) =>
+	!lidUser || !pnUser || lidUser === pnUser
+
 export const storeLidPnMapping = (lid: string, pn: string) => {
 	if (typeof lid === 'string' && typeof pn === 'string') {
 		const cleanLid = lid.split(':')[0]!.split('@')[0] + '@lid'
 		const cleanPn = pn.split(':')[0]!.split('@')[0] + '@s.whatsapp.net'
+		if (isBogusSameDigitMapping(cleanLid.split('@')[0]!, cleanPn.split('@')[0]!)) {
+			return
+		}
 		lidPnMap.set(cleanLid, cleanPn)
 		pnLidMap.set(cleanPn, cleanLid)
 	}
@@ -160,12 +169,20 @@ export const storeLidPnMapping = (lid: string, pn: string) => {
 export const getPnForLid = (lid: string): string | null => {
 	if (typeof lid !== 'string') return null
 	const cleanLid = lid.split(':')[0]!.split('@')[0] + '@lid'
-	return lidPnMap.get(cleanLid) || null
+	const mapped = lidPnMap.get(cleanLid) || null
+	if (mapped && isBogusSameDigitMapping(cleanLid.split('@')[0]!, mapped.split('@')[0]!)) {
+		return null
+	}
+	return mapped
 }
 
 export const getLidForPn = (pn: string): string | null => {
 	if (typeof pn !== 'string') return null
 	const cleanPn = pn.split(':')[0]!.split('@')[0] + '@s.whatsapp.net'
-	return pnLidMap.get(cleanPn) || null
+	const mapped = pnLidMap.get(cleanPn) || null
+	if (mapped && isBogusSameDigitMapping(mapped.split('@')[0]!, cleanPn.split('@')[0]!)) {
+		return null
+	}
+	return mapped
 }
 
