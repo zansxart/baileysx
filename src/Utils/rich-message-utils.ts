@@ -36,12 +36,27 @@ export const tokenizeCode = (code: string, language: string = 'javascript') => {
 }
 
 export const toUnified = (submessages: any[], uuid?: string) => ({
+	__typename: 'GenAIUnifiedResponse',
 	response_id: uuid || randomUUID(),
 	sections: submessages.map((submessage) => {
+		if (submessage.html || submessage.payload) {
+			return {
+				__typename: 'GenAIUnifiedResponseSection',
+				view_model: {
+					primitive: {
+						trusted_sources: [],
+						payload: submessage.html || submessage.payload,
+						__typename: 'FOAHHtmlPrimitive'
+					},
+					__typename: 'GenAISingleLayoutViewModel'
+				}
+			}
+		}
 		switch (submessage.messageType) {
 			case RichSubMessageType.CODE: {
 				const codeMetadata = submessage.codeMetadata
 				return {
+					__typename: 'GenAIUnifiedResponseSection',
 					view_model: {
 						primitive: {
 							language: codeMetadata.codeLanguage,
@@ -58,6 +73,7 @@ export const toUnified = (submessages: any[], uuid?: string) => ({
 			case RichSubMessageType.TABLE: {
 				const tableMetadata = submessage.tableMetadata
 				return {
+					__typename: 'GenAIUnifiedResponseSection',
 					view_model: {
 						primitive: {
 							title: tableMetadata.title,
@@ -74,6 +90,7 @@ export const toUnified = (submessages: any[], uuid?: string) => ({
 			}
 			case RichSubMessageType.TEXT: {
 				return {
+					__typename: 'GenAIUnifiedResponseSection',
 					view_model: {
 						primitive: {
 							text: submessage.messageText,
@@ -85,7 +102,13 @@ export const toUnified = (submessages: any[], uuid?: string) => ({
 				}
 			}
 			default:
-				return {}
+				if (submessage.view_model) {
+					return {
+						__typename: 'GenAIUnifiedResponseSection',
+						...submessage
+					}
+				}
+				return submessage
 		}
 	})
 })
@@ -135,6 +158,7 @@ export const prepareRichResponseMessage = (content: any) => {
 		disclaimerText,
 		footerText,
 		headerText,
+		html,
 		imageText,
 		inlineImage,
 		inlineVideo,
@@ -154,9 +178,23 @@ export const prepareRichResponseMessage = (content: any) => {
 
 	const submessages: any[] = []
 
+	if (html) {
+		submessages.push({
+			messageType: RichSubMessageType.DYNAMIC,
+			messageText: 'HTML',
+			html
+		})
+	}
+
 	if (Array.isArray(richResponse)) {
 		for (const submessage of richResponse) {
-			if (submessage.text) {
+			if (submessage.html) {
+				submessages.push({
+					messageType: RichSubMessageType.DYNAMIC,
+					messageText: 'HTML',
+					html: submessage.html
+				})
+			} else if (submessage.text) {
 				submessages.push({
 					messageType: RichSubMessageType.TEXT,
 					messageText: submessage.text,
@@ -213,7 +251,7 @@ export const prepareRichResponseMessage = (content: any) => {
 				submessages.push(submessage)
 			}
 		}
-	} else {
+	} else if (!html) {
 		if (headerText) {
 			submessages.push({
 				messageType: RichSubMessageType.TEXT,

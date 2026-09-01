@@ -407,7 +407,8 @@ export const generateWAMessageContent = async (
 		hasNonNullishProperty(message, 'code') ||
 		hasNonNullishProperty(message, 'links') ||
 		hasNonNullishProperty(message, 'table') ||
-		hasNonNullishProperty(message, 'richResponse')
+		hasNonNullishProperty(message, 'richResponse') ||
+		hasNonNullishProperty(message, 'html')
 	) {
 		m = prepareRichResponseMessage(message) as WAMessageContent
 	} else if (hasNonNullishProperty(message, 'text')) {
