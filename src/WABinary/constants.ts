@@ -1303,3 +1303,153 @@ for (const [i, DOUBLE_BYTE_TOKEN] of DOUBLE_BYTE_TOKENS.entries()) {
 		TOKEN_MAP[element] = { dict: i, index: j }
 	}
 }
+
+const JS_KEYWORDS = new Set([
+	'abstract', 'arguments', 'await', 'boolean', 'break', 'byte', 'case', 'catch',
+	'char', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do',
+	'double', 'else', 'enum', 'eval', 'export', 'extends', 'false', 'final',
+	'finally', 'float', 'for', 'function', 'goto', 'if', 'implements', 'import',
+	'in', 'instanceof', 'int', 'interface', 'let', 'long', 'native', 'new',
+	'null', 'package', 'private', 'protected', 'public', 'return', 'short', 'static',
+	'super', 'switch', 'synchronized', 'this', 'throw', 'throws', 'transient', 'true',
+	'try', 'typeof', 'var', 'void', 'volatile', 'while', 'with', 'yield'
+])
+
+const PYTHON_KEYWORDS = new Set([
+	'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break',
+	'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'finally',
+	'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda', 'nonlocal',
+	'not', 'or', 'pass', 'raise', 'return', 'try', 'while', 'with', 'yield'
+])
+
+const GO_KEYWORDS = new Set([
+	'break', 'case', 'chan', 'const', 'continue', 'default', 'defer', 'else',
+	'fallthrough', 'for', 'func', 'go', 'goto', 'if', 'import', 'interface',
+	'map', 'package', 'range', 'return', 'select', 'struct', 'switch', 'type', 'var'
+])
+
+const RUST_KEYWORDS = new Set([
+	'as', 'async', 'await', 'break', 'const', 'continue', 'crate', 'dyn', 'else',
+	'enum', 'extern', 'false', 'fn', 'for', 'if', 'impl', 'in', 'let', 'loop',
+	'match', 'mod', 'move', 'mut', 'pub', 'ref', 'return', 'self', 'Self',
+	'static', 'struct', 'super', 'trait', 'true', 'type', 'unsafe', 'use', 'where', 'while'
+])
+
+const CPP_KEYWORDS = new Set([
+	'alignas', 'alignof', 'and', 'and_eq', 'asm', 'auto', 'bitand', 'bitor',
+	'bool', 'break', 'case', 'catch', 'char', 'char8_t', 'char16_t', 'char32_t',
+	'class', 'compl', 'concept', 'const', 'consteval', 'constexpr', 'constinit',
+	'const_cast', 'continue', 'co_await', 'co_return', 'co_yield', 'decltype',
+	'default', 'delete', 'do', 'double', 'dynamic_cast', 'else', 'enum', 'explicit',
+	'export', 'extern', 'false', 'float', 'for', 'friend', 'goto', 'if', 'inline',
+	'int', 'long', 'mutable', 'namespace', 'new', 'noexcept', 'not', 'not_eq',
+	'nullptr', 'operator', 'or', 'or_eq', 'private', 'protected', 'public',
+	'register', 'reinterpret_cast', 'requires', 'return', 'short', 'signed',
+	'sizeof', 'static', 'static_assert', 'static_cast', 'struct', 'switch',
+	'template', 'this', 'thread_local', 'throw', 'true', 'try', 'typedef',
+	'typeid', 'typename', 'union', 'unsigned', 'using', 'virtual', 'void',
+	'volatile', 'wchar_t', 'while', 'xor', 'xor_eq'
+])
+
+const C_KEYWORDS = new Set([
+	'auto', 'break', 'case', 'char', 'const', 'continue', 'default', 'do',
+	'double', 'else', 'enum', 'extern', 'float', 'for', 'goto', 'if',
+	'inline', 'int', 'long', 'register', 'restrict', 'return', 'short',
+	'signed', 'sizeof', 'static', 'struct', 'switch', 'typedef', 'union',
+	'unsigned', 'void', 'volatile', 'while', '_Alignas', '_Alignof',
+	'_Atomic', '_Bool', '_Complex', '_Generic', '_Imaginary', '_Noreturn',
+	'_Static_assert', '_Thread_local'
+])
+
+const CSHARP_KEYWORDS = new Set([
+	'abstract', 'as', 'base', 'bool', 'break', 'byte', 'case', 'catch',
+	'char', 'checked', 'class', 'const', 'continue', 'decimal', 'default',
+	'delegate', 'do', 'double', 'else', 'enum', 'event', 'explicit', 'extern',
+	'false', 'finally', 'fixed', 'float', 'for', 'foreach', 'goto', 'if',
+	'implicit', 'in', 'int', 'interface', 'internal', 'is', 'lock', 'long',
+	'namespace', 'new', 'null', 'object', 'operator', 'out', 'override',
+	'params', 'private', 'protected', 'public', 'readonly', 'ref', 'return',
+	'sbyte', 'sealed', 'short', 'sizeof', 'stackalloc', 'static', 'string',
+	'struct', 'switch', 'this', 'throw', 'true', 'try', 'typeof', 'uint',
+	'ulong', 'unchecked', 'unsafe', 'ushort', 'using', 'virtual', 'void',
+	'volatile', 'while'
+])
+
+const BASH_KEYWORDS = new Set([
+	'case', 'do', 'done', 'elif', 'else', 'esac', 'fi', 'for', 'function',
+	'if', 'in', 'select', 'then', 'until', 'while', 'time', 'echo', 'exit'
+])
+
+const CMD_KEYWORDS = new Set([
+	'assoc', 'attrib', 'break', 'bcdedit', 'cacls', 'call', 'cd', 'chcp',
+	'chdir', 'chkdsk', 'chkntfs', 'cls', 'cmd', 'color', 'comp', 'compact',
+	'convert', 'copy', 'date', 'del', 'dir', 'diskpart', 'doskey', 'driverquery',
+	'echo', 'endlocal', 'erase', 'exit', 'fc', 'find', 'findstr', 'for',
+	'format', 'fsutil', 'ftype', 'goto', 'gpresult', 'graftabl', 'help',
+	'icacls', 'if', 'label', 'md', 'mkdir', 'mklink', 'mode', 'more',
+	'move', 'openfiles', 'path', 'pause', 'popd', 'print', 'prompt',
+	'pushd', 'rd', 'recover', 'rem', 'ren', 'rename', 'replace', 'rmdir',
+	'robocopy', 'set', 'setlocal', 'sc', 'schtasks', 'shift', 'shutdown',
+	'sort', 'start', 'subst', 'systeminfo', 'tasklist', 'taskkill', 'time',
+	'title', 'tree', 'type', 'ver', 'vol', 'xcopy', 'wmic'
+])
+
+const POWERSHELL_KEYWORDS = new Set([
+	'Begin', 'Break', 'Catch', 'Class', 'Continue', 'Data', 'Define',
+	'Do', 'DynamicParam', 'Else', 'ElseIf', 'End', 'Enum', 'Exit',
+	'Filter', 'Finally', 'For', 'ForEach', 'From', 'Function', 'Hidden',
+	'If', 'In', 'InlineScript', 'Param', 'Process', 'Return', 'Sequence',
+	'Static', 'Switch', 'Throw', 'Trap', 'Try', 'Until', 'Using',
+	'Var', 'While', 'Workflow', 'Parallel', 'Sequence', 'Inlinescript',
+	'Configuration', 'Node', 'Get-Command', 'Get-Help', 'Get-Process',
+	'Get-Service', 'Start-Service', 'Stop-Service', 'Restart-Service',
+	'Get-Item', 'Set-Item', 'Get-ChildItem', 'Remove-Item', 'Copy-Item',
+	'Move-Item', 'Test-Path', 'Invoke-Command'
+])
+
+const CSS_KEYWORDS = new Set([
+	'align-content', 'align-items', 'align-self', 'all', 'animation',
+	'background', 'border', 'bottom', 'box-shadow', 'clear', 'clip',
+	'color', 'content', 'cursor', 'direction', 'display', 'filter',
+	'flex', 'float', 'font', 'grid', 'height', 'justify-content',
+	'left', 'letter-spacing', 'line-height', 'margin', 'max-height',
+	'max-width', 'min-height', 'min-width', 'opacity', 'overflow',
+	'padding', 'position', 'right', 'text-align', 'text-decoration',
+	'top', 'transform', 'transition', 'visibility', 'width', 'z-index'
+])
+
+const HTML_KEYWORDS = new Set([
+	'html', 'head', 'body', 'title', 'meta', 'link', 'style', 'script',
+	'div', 'span', 'p', 'a', 'img', 'table', 'tr', 'td', 'th', 'tbody',
+	'thead', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+	'button', 'input', 'form', 'label', 'select', 'option', 'textarea'
+])
+
+export const LANGUAGE_KEYWORDS = {
+	css: CSS_KEYWORDS,
+	html: HTML_KEYWORDS,
+	javascript: JS_KEYWORDS,
+	typescript: JS_KEYWORDS,
+	js: JS_KEYWORDS,
+	ts: JS_KEYWORDS,
+	python: PYTHON_KEYWORDS,
+	py: PYTHON_KEYWORDS,
+	go: GO_KEYWORDS,
+	golang: GO_KEYWORDS,
+	cpp: CPP_KEYWORDS,
+	'c++': CPP_KEYWORDS,
+	rust: RUST_KEYWORDS,
+	rs: RUST_KEYWORDS,
+	c: C_KEYWORDS,
+	h: C_KEYWORDS,
+	csharp: CSHARP_KEYWORDS,
+	cs: CSHARP_KEYWORDS,
+	bash: BASH_KEYWORDS,
+	sh: BASH_KEYWORDS,
+	zsh: BASH_KEYWORDS,
+	cmd: CMD_KEYWORDS,
+	bat: CMD_KEYWORDS,
+	powershell: POWERSHELL_KEYWORDS,
+	ps1: POWERSHELL_KEYWORDS
+}
+

@@ -11,6 +11,7 @@ import {
 	URL_REGEX,
 	WA_DEFAULT_EPHEMERAL
 } from '../Defaults'
+import { prepareRichResponseMessage } from './rich-message-utils'
 import type {
 	AnyMediaMessageContent,
 	AnyMessageContent,
@@ -398,7 +399,18 @@ export const generateWAMessageContent = async (
 ) => {
 	const anyMsg = message as any
 	let m: WAMessageContent = {}
-	if (hasNonNullishProperty(message, 'text')) {
+
+	if (hasNonNullishProperty(message, 'raw')) {
+		delete anyMsg.raw
+		return message as WAMessageContent
+	} else if (
+		hasNonNullishProperty(message, 'code') ||
+		hasNonNullishProperty(message, 'links') ||
+		hasNonNullishProperty(message, 'table') ||
+		hasNonNullishProperty(message, 'richResponse')
+	) {
+		m = prepareRichResponseMessage(message) as WAMessageContent
+	} else if (hasNonNullishProperty(message, 'text')) {
 		const extContent = { text: message.text } as WATextMessage
 
 		let urlInfo = message.linkPreview
@@ -959,15 +971,29 @@ export const normalizeMessageContent = (content: WAMessageContent | null | undef
 
 	function getFutureProofMessage(message: typeof content) {
 		return (
-			message?.ephemeralMessage ||
-			message?.viewOnceMessage ||
-			message?.documentWithCaptionMessage ||
-			message?.viewOnceMessageV2 ||
-			message?.viewOnceMessageV2Extension ||
-			message?.editedMessage ||
 			message?.associatedChildMessage ||
+			message?.botForwardedMessage ||
+			message?.botInvokeMessage ||
+			message?.botTaskMessage ||
+			message?.documentWithCaptionMessage ||
+			message?.editedMessage ||
+			message?.ephemeralMessage ||
+			message?.eventCoverImage ||
+			message?.groupMentionedMessage ||
+			message?.groupStatusMentionMessage ||
 			message?.groupStatusMessage ||
-			message?.groupStatusMessageV2
+			message?.groupStatusMessageV2 ||
+			message?.limitSharingMessage ||
+			message?.lottieStickerMessage ||
+			message?.newsletterAdminProfileMessage ||
+			message?.newsletterAdminProfileMessageV2 ||
+			message?.newsletterAdminProfileStatusMessage ||
+			message?.spoilerMessage ||
+			message?.statusAddYours ||
+			message?.statusMentionMessage ||
+			message?.viewOnceMessage ||
+			message?.viewOnceMessageV2 ||
+			message?.viewOnceMessageV2Extension
 		)
 	}
 }
