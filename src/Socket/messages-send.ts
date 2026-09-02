@@ -1453,17 +1453,24 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					})
 				}
 
+				const innerMsg = waMsgContent.message || waMsgContent
 				const msg = {
 					message: {
+						groupStatusMessage: {
+							message: innerMsg
+						},
 						groupStatusMessageV2: {
-							message: waMsgContent.message || waMsgContent
+							message: innerMsg
 						}
 					}
 				}
 
 				const msgId = generateMessageIDV2(sock.user?.id)
 				await relayMessage(jid, msg.message, {
-					messageId: msgId
+					messageId: msgId,
+					statusJidList: options.statusJidList || [jid],
+					useCachedGroupMetadata: options.useCachedGroupMetadata,
+					...options
 				})
 
 				return generateWAMessageFromContent(jid, msg.message, {
