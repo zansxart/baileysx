@@ -41,6 +41,10 @@ Dibandingkan dengan versi resmi Baileys, **baileysx** hadir dengan peningkatan b
 9. **Native Event `polls.vote`**:
    - Memproses dekripsi jajak pendapat secara native langsung di dalam layer soket. Memancarkan event `'polls.vote'` dengan data lengkap: `pollId`, `voter`, `vote` terdekripsi, dan `timestamp`.
 
+10. **Rich Response & Pesan Interaktif HTML / Mini Games (Meta AI)**:
+    - Dukungan pembuatan dan pengiriman pesan interaktif berbasis HTML/CSS/JavaScript (Game seperti Tebak Gambar, Tic-Tac-Toe, Slot Machine, Tetris, Catur, Ludo, dll.) langsung di dalam chat WhatsApp.
+    - Mendukung format praktis via `sendMessage` (`{ html: '...' }`) maupun manual relay menggunakan `botForwardedMessage` + `richResponseMessage` (`FOAHtmlPrimitiveDemoDONOTUSE`).
+
 ---
 
 ## 📦 Cara Instalasi
@@ -157,6 +161,126 @@ await sock.sendMessage(jid, {
     }
 })
 ```
+
+### 4. Mengirim Pesan Interaktif HTML / Mini Games (Meta AI Rich Response)
+
+**baileysx** mendukung pengiriman aplikasi web ringan / game interaktif berbasis HTML5, CSS, dan JavaScript yang dapat dibuka dan dimainkan secara langsung di dalam aplikasi WhatsApp menggunakan arsitektur **Meta AI Rich Response** (`richResponseMessage`).
+
+#### ⚡ Cara 1: Menggunakan `sock.sendMessage` (Paling Praktis)
+Anda dapat langsung menyematkan string HTML ke properti `html` di dalam `sendMessage`:
+
+```typescript
+const htmlGame = `<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+  body {
+    background: #111b21;
+    color: #e9edef;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    text-align: center;
+    padding: 24px 16px;
+    touch-action: manipulation;
+  }
+  .card {
+    background: #1f2c34;
+    border: 1px solid #2a3942;
+    border-radius: 14px;
+    padding: 20px;
+    max-width: 320px;
+    margin: 0 auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  h2 { color: #ffd166; margin-bottom: 8px; font-size: 18px; }
+  p { color: #8696a0; font-size: 13px; margin-bottom: 16px; }
+  .counter { font-size: 36px; font-weight: bold; color: #00a884; margin-bottom: 16px; }
+  button {
+    background: #00a884;
+    color: #0b141a;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+  }
+  button:active { transform: scale(0.95); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2>🕹️ Mini Clicker</h2>
+    <p>Ketuk tombol secepat mungkin!</p>
+    <div class="counter" id="count">0</div>
+    <button onclick="document.getElementById('count').innerText = ++count">TAP SAYA!</button>
+  </div>
+  <script>let count = 0;</script>
+</body>
+</html>`
+
+// Kirim langsung via sendMessage:
+await sock.sendMessage(jid, {
+    html: htmlGame
+})
+```
+
+#### 🛠️ Cara 2: Menggunakan `generateWAMessageFromContent` + `relayMessage` (Low-Level / Plugin Bot)
+Jika bot Anda membutuhkan kontrol penuh atas format relay dan ID pesan:
+
+```typescript
+import { generateWAMessageFromContent } from 'baileysx'
+import crypto from 'crypto'
+
+const slots = {
+    botForwardedMessage: {
+        message: {
+            richResponseMessage: {
+                messageType: 1,
+                unifiedResponse: {
+                    data: Buffer.from(JSON.stringify({
+                        __typename: "GenAIUnifiedResponse",
+                        response_id: crypto.randomUUID(),
+                        sections: [{
+                            __typename: "GenAIUnifiedResponseSection",
+                            view_model: {
+                                __typename: "GenAISingleLayoutViewModel",
+                                primitive: {
+                                    __typename: "FOAHtmlPrimitiveDemoDONOTUSE", // Bypass typename client WhatsApp
+                                    trusted_sources: [],
+                                    payload: htmlGame
+                                }
+                            }
+                        }]
+                    })).toString("base64")
+                },
+                contextInfo: {
+                    isForwarded: true,
+                    forwardOrigin: 4
+                }
+            }
+        }
+    }
+}
+
+const msg = generateWAMessageFromContent(jid, slots, {})
+await sock.relayMessage(jid, msg.message, {
+    messageId: msg.key.id
+})
+```
+
+> **💡 Tips Optimalisasi HTML Game WhatsApp:**
+> 1. **Meta Viewport:** Wajib gunakan `<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">` agar pas di layar handphone dan tidak ter-zoom otomatis saat diklik.
+> 2. **Touch Response:** Gunakan `touch-action: manipulation;` di CSS pada elemen interaktif untuk menghilangkan delay ~300ms saat disentuh di layar sentuh.
+> 3. **Palet Warna WhatsApp Dark:**
+>    - Background Utama: `#0b141a` atau `transparent`
+>    - Container Kartu: `#111b21` atau `#1f2c34`
+>    - Border: `#2a3942` atau `#374248`
+>    - Aksen Hijau WhatsApp: `#00a884`
+>    - Aksen Emas/Poin: `#ffd166`
+>    - Teks Utama: `#e9edef`, Teks Sekunder: `#8696a0`
 
 ---
 

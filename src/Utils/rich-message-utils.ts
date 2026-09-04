@@ -46,7 +46,7 @@ export const toUnified = (submessages: any[], uuid?: string) => ({
 					primitive: {
 						trusted_sources: [],
 						payload: submessage.html || submessage.payload,
-						__typename: 'FOAHHtmlPrimitive'
+						__typename: submessage.primitiveType || 'FOAHtmlPrimitiveDemoDONOTUSE'
 					},
 					__typename: 'GenAISingleLayoutViewModel'
 				}
