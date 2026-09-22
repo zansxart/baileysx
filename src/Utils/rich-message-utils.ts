@@ -29,7 +29,7 @@ export const tokenizeCode = (code: string, language: string = 'javascript') => {
 		} else if (match[5]) {
 			blocks.push({ highlightType: CodeHighlightType.NUMBER, codeContent: match[5] })
 		} else {
-			blocks.push({ highlightType: CodeHighlightType.DEFAULT, codeContent: match[6] })
+			blocks.push({ highlightType: CodeHighlightType.DEFAULT, codeContent: match[6] || '' })
 		}
 	}
 	return blocks
