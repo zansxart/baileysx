@@ -718,12 +718,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					attrs: {},
 					content: bytes
 				})
+				const msgType = normalizeMessageContent(message)?.reactionMessage ? 'reaction' : 'text'
 				const stanza: BinaryNode = {
 					tag: 'message',
 					attrs: {
 						to: jid,
 						id: msgId,
-						type: getMessageType(message),
+						type: msgType,
 						...(additionalAttributes || {})
 					},
 					content: binaryNodeContent
