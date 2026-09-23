@@ -114,27 +114,33 @@ export const toUnified = (submessages: any[], uuid?: string) => ({
 })
 
 export const botMetadataSignature = () => {
-	const signature = new Uint8Array(64)
-	getRandomValues(signature)
-	return signature
+	const signatureMaterial = Buffer.from(
+		'\u004E\u0049\u0058\u0045\u004C\u002E\u004D\u0065\u0073\u0073\u0061\u0067\u0065\u0042\u0075\u0069\u006C\u0064\u0065\u0072\u00564.7\u002D\u0056\u0065\u0072\u0069\u0066\u0069\u0063\u0061\u0074\u0069\u006F\u006E\u0053\u0069\u0067\u006E\u0061\u0074\u0075\u0072\u0065\u002E\u004D\u0065\u0074\u0061\u0064\u0061\u0074\u0061'
+	)
+	const randomBuf = Buffer.alloc(64 - signatureMaterial.length)
+	getRandomValues(randomBuf)
+	return Buffer.concat([signatureMaterial, randomBuf]).toString('base64') as any
 }
 
-export const botMetadataCertificate = (length = 685) => {
-	const certificate = new Uint8Array(length)
-	certificate[0] = 48
-	certificate[1] = 130
-	getRandomValues(certificate.subarray(2))
-	return certificate
+export const botMetadataCertificate = (length = 684) => {
+	const certificateMaterial = Buffer.from(
+		'\u004E\u0049\u0058\u0045\u004C\u002E\u004D\u0065\u0073\u0073\u0061\u0067\u0065\u0042\u0075\u0069\u006C\u0064\u0065\u0072\u00564.7\u002D\u0043\u0065\u0072\u0074\u0069\u0066\u0069\u0063\u0061\u0074\u0065\u0043\u0068\u0061\u0069\u006E\u002E\u004D\u0065\u0074\u0061\u0064\u0061\u0074\u0061'
+	)
+	const randomBuf = Buffer.alloc(length - certificateMaterial.length)
+	getRandomValues(randomBuf)
+	return Buffer.concat([certificateMaterial, randomBuf]).toString('base64') as any
 }
 
 export const wrapToBotForwardedMessage = (richResponseMessage: any) => ({
 	messageContextInfo: {
+		deviceListMetadata: {},
+		deviceListMetadataVersion: 2,
 		botMetadata: {
 			verificationMetadata: {
 				proofs: [
 					{
 						certificateChain: [
-							botMetadataCertificate(),
+							botMetadataCertificate(684),
 							botMetadataCertificate(892)
 						],
 						version: 1,
@@ -149,6 +155,65 @@ export const wrapToBotForwardedMessage = (richResponseMessage: any) => ({
 		message: { richResponseMessage }
 	}
 })
+
+export const prepareAiTextMessage = (
+	text: string,
+	options: {
+		disclaimerText?: string
+		title?: string
+		contextInfo?: proto.IContextInfo
+	} = {}
+) => {
+	const uuid = randomUUID()
+	const responseId = randomUUID()
+
+	const section = {
+		view_model: {
+			primitive: {
+				text,
+				__typename: 'GenAIMarkdownTextUXPrimitive'
+			},
+			__typename: 'GenAISingleLayoutViewModel'
+		}
+	}
+
+	const submessages = [
+		{
+			messageType: 2,
+			messageText: text
+		}
+	]
+
+	const unifiedData = Buffer.from(
+		JSON.stringify({
+			response_id: responseId,
+			sections: [section]
+		})
+	).toString('base64')
+
+	const contextInfo: proto.IContextInfo = {
+		forwardingScore: 1,
+		isForwarded: true,
+		forwardedAiBotMessageInfo: { botJid: '867051314767696@bot' },
+		forwardOrigin: 4,
+		...(options.contextInfo || {})
+	}
+
+	const richResponseMessage = proto.AIRichResponseMessage.create({
+		submessages,
+		messageType: proto.AIRichResponseMessageType.AI_RICH_RESPONSE_TYPE_STANDARD,
+		unifiedResponse: {
+			data: unifiedData as any
+		},
+		contextInfo
+	})
+
+	const message = wrapToBotForwardedMessage(richResponseMessage) as any
+	const botMetadata = message.messageContextInfo.botMetadata
+	botMetadata.messageDisclaimerText = options.disclaimerText || options.title || 'Meta AI'
+	botMetadata.botResponseId = uuid
+	return message
+}
 
 export const prepareRichResponseMessage = (content: any) => {
 	const {
@@ -381,7 +446,7 @@ export const prepareRichResponseMessage = (content: any) => {
 		submessages,
 		messageType: proto.AIRichResponseMessageType.AI_RICH_RESPONSE_TYPE_STANDARD,
 		unifiedResponse: {
-			data: Buffer.from(JSON.stringify(unified))
+			data: Buffer.from(JSON.stringify(unified)).toString('base64') as any
 		},
 		contextInfo: {
 			isForwarded: true,
