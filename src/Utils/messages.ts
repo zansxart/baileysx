@@ -884,13 +884,18 @@ export const injectAiBotInfo = (
 		aiBotJid?: string
 	}
 ) => {
-	const isPrivChat = isPrivateChat(options.jid)
+	// Exclude newsletter and status broadcast (not supported in protocol)
+	if (options.jid && (isJidNewsletter(options.jid) || isJidStatusBroadcast(options.jid))) {
+		return
+	}
+
 	const isExplicitAi = options.ai
 	const isAiChatEnabled = options.aiChat !== false
+	// Default to true across Baileys unless explicitly set to false
 	const shouldAddAi =
 		isExplicitAi !== undefined
 			? Boolean(isExplicitAi)
-			: isAiChatEnabled && isPrivChat
+			: isAiChatEnabled
 
 	if (!shouldAddAi) return
 
@@ -951,7 +956,7 @@ export const generateWAMessageFromContent = (
 		innerMessage.extendedTextMessage = { text }
 		if (message && (message as any).conversation) {
 			delete (message as any).conversation
-			message.extendedTextMessage = { text }
+			message.extendedTextMessage = innerMessage.extendedTextMessage
 		}
 		key = 'extendedTextMessage'
 	}
