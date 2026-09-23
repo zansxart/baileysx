@@ -363,9 +363,12 @@ export type MessageRelayOptions = MinimalRelayOptions & {
 	useUserDevicesCache?: boolean
 	/** jid list of participants for status@broadcast */
 	statusJidList?: string[]
+	/** whether to include AI biz_bot stanza node */
+	ai?: boolean | string
 }
 
 export type MiscMessageGenerationOptions = MinimalRelayOptions & {
+	additionalNodes?: BinaryNode[]
 	/** option to tag all group participants automatically */
 	mentionAll?: boolean
 	/** optional, if you want to manually set the timestamp of the message */

@@ -4,6 +4,7 @@ import { promises as fs } from 'fs'
 import { type Transform } from 'stream'
 import { proto } from '../../WAProto/index.js'
 import {
+	BIZ_BOT_SUPPORT_PAYLOAD,
 	CALL_AUDIO_PREFIX,
 	CALL_VIDEO_PREFIX,
 	MEDIA_KEYS,
@@ -427,26 +428,12 @@ export const generateWAMessageContent = async (
 	) {
 		m = prepareRichResponseMessage(message) as WAMessageContent
 	} else if (hasNonNullishProperty(message, 'text')) {
-		const isPrivChat = isPrivateChat(options.jid)
-		const isExplicitAi = (message as any)?.ai !== undefined ? (message as any).ai : options.ai
-		const isAiChatEnabled = options.aiChat !== false
-		const shouldAddAi =
-			isExplicitAi !== undefined
-				? Boolean(isExplicitAi)
-				: (isAiChatEnabled && isPrivChat)
+		const extContent = { text: message.text } as WATextMessage
 
-		if (shouldAddAi && typeof message.text === 'string') {
-			m = prepareAiTextMessage(message.text, {
-				disclaimerText: (message as any)?.aiDisclaimer || (message as any)?.title || 'Meta AI',
-				contextInfo: message.contextInfo
-			}) as any
-		} else {
-			const extContent = { text: message.text } as WATextMessage
-
-			let urlInfo = message.linkPreview
-			if (typeof urlInfo === 'undefined') {
-				urlInfo = await generateLinkPreviewIfRequired(message.text, options.getUrlInfo, options.logger)
-			}
+		let urlInfo = message.linkPreview
+		if (typeof urlInfo === 'undefined') {
+			urlInfo = await generateLinkPreviewIfRequired(message.text, options.getUrlInfo, options.logger)
+		}
 
 		if (urlInfo) {
 			extContent.matchedText = urlInfo['matched-text']
@@ -476,7 +463,6 @@ export const generateWAMessageContent = async (
 		}
 
 		m.extendedTextMessage = extContent
-		}
 	} else if (hasNonNullishProperty(message, 'contacts')) {
 		const contactLen = message.contacts.contacts.length
 		if (!contactLen) {
@@ -879,6 +865,19 @@ export const generateWAMessageContent = async (
 		}
 	}
 
+	const isPrivChat = isPrivateChat(options.jid)
+	const isExplicitAi = typeof (message as any)?.ai !== 'undefined' ? (message as any).ai : options.ai
+	const isAiChatEnabled = options.aiChat !== false
+	const shouldAddAi =
+		isExplicitAi !== undefined
+			? Boolean(isExplicitAi)
+			: (isAiChatEnabled && isPrivChat)
+
+	if (shouldAddAi && isPrivChat) {
+		m.messageContextInfo = m.messageContextInfo || {}
+		m.messageContextInfo.supportPayload = BIZ_BOT_SUPPORT_PAYLOAD
+	}
+
 	injectAiBotInfo(m, {
 		jid: options.jid,
 		ai: typeof (message as any)?.ai !== 'undefined' ? (message as any).ai : options.ai,
@@ -909,6 +908,11 @@ export const injectAiBotInfo = (
 		aiBotJid?: string
 	}
 ) => {
+	// Only inject forwardedAiBotMessageInfo if an explicit bot name or jid is provided
+	if (!options.aiBotName && !options.aiBotJid && typeof options.ai !== 'string') {
+		return
+	}
+
 	// Exclude newsletter and status broadcast (not supported in protocol)
 	if (options.jid && (isJidNewsletter(options.jid) || isJidStatusBroadcast(options.jid))) {
 		return

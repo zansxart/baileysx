@@ -1,7 +1,7 @@
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto/index.js'
-import { DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults'
+import { BIZ_BOT_SUPPORT_PAYLOAD, DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults'
 import type {
 	AnyMessageContent,
 	MediaConnInfo,
@@ -33,6 +33,7 @@ import {
 	getStatusCodeForMediaRetry,
 	getUrlFromDirectPath,
 	getWAUploadToServer,
+	isPrivateChat,
 	MessageRetryManager,
 	normalizeMessageContent,
 	parseAndInjectE2ESessions,
@@ -634,16 +635,34 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	const relayMessage = async (
 		jid: string,
 		message: proto.IMessage,
-		{
+		options: MessageRelayOptions
+	) => {
+		let {
 			messageId: msgId,
 			participant,
 			additionalAttributes,
 			additionalNodes,
 			useUserDevicesCache,
 			useCachedGroupMetadata,
-			statusJidList
-		}: MessageRelayOptions
-	) => {
+			statusJidList,
+			ai
+		} = options
+
+		const isPriv = isPrivateChat(jid)
+		const isAiPayload = !!message?.messageContextInfo?.supportPayload?.includes('"is_ai_message":true')
+		if (isPriv && (ai || isAiPayload)) {
+			additionalNodes = additionalNodes ? [...additionalNodes] : []
+			const hasBot = additionalNodes.some(n => n.tag === 'bot' && n.attrs?.biz_bot === '1')
+			if (!hasBot) {
+				additionalNodes.push({
+					tag: 'bot',
+					attrs: {
+						biz_bot: '1'
+					}
+				})
+			}
+		}
+
 		const mappedJid = getLidForPn(jid)
 		if (mappedJid) {
 			jid = mappedJid
@@ -1512,7 +1531,29 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const isPinMsg = 'pin' in content && !!(content as any).pin
 				const isPollMessage = 'poll' in content && !!(content as any).poll
 				const additionalAttributes: BinaryNodeAttributes = {}
-				const additionalNodes: BinaryNode[] = []
+				const additionalNodes: BinaryNode[] = options.additionalNodes ? [...options.additionalNodes] : []
+
+				const isPrivChat = isPrivateChat(jid)
+				const isExplicitAi = (content as any)?.ai !== undefined ? (content as any).ai : (options as any)?.ai
+				const isAiChatEnabled = config.aiChat !== false
+				const shouldAddAi =
+					isExplicitAi !== undefined
+						? Boolean(isExplicitAi)
+						: (isAiChatEnabled && isPrivChat)
+
+				if (shouldAddAi && isPrivChat) {
+					fullMsg.message!.messageContextInfo = fullMsg.message!.messageContextInfo || {}
+					fullMsg.message!.messageContextInfo.supportPayload = BIZ_BOT_SUPPORT_PAYLOAD
+					const hasBot = additionalNodes.some(n => n.tag === 'bot' && n.attrs?.biz_bot === '1')
+					if (!hasBot) {
+						additionalNodes.push({
+							tag: 'bot',
+							attrs: {
+								biz_bot: '1'
+							}
+						})
+					}
+				}
 				// required for delete
 				if (isDeleteMsg) {
 					// if the chat is a group, and I am not the author, then delete the message as an admin

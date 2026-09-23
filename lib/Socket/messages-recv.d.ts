@@ -17,7 +17,7 @@ export declare const makeMessagesRecvSocket: (config: SocketConfig) => {
     };
     issuePrivacyTokens: (jids: string[], timestamp?: number) => Promise<any>;
     assertSessions: (jids: string[], force?: boolean) => Promise<boolean>;
-    relayMessage: (jid: string, message: proto.IMessage, { messageId: msgId, participant, additionalAttributes, additionalNodes, useUserDevicesCache, useCachedGroupMetadata, statusJidList }: MessageRelayOptions) => Promise<string>;
+    relayMessage: (jid: string, message: proto.IMessage, options: MessageRelayOptions) => Promise<string>;
     sendReceipt: (jid: string, participant: string | undefined, messageIds: string[], type: MessageReceiptType) => Promise<void>;
     sendReceipts: (keys: WAMessageKey[], type: MessageReceiptType) => Promise<void>;
     readMessages: (keys: WAMessageKey[]) => Promise<void>;

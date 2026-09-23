@@ -12,6 +12,7 @@ export declare const WA_ADV_DEVICE_SIG_PREFIX: Buffer<ArrayBuffer>;
 export declare const WA_ADV_HOSTED_ACCOUNT_SIG_PREFIX: Buffer<ArrayBuffer>;
 export declare const WA_ADV_HOSTED_DEVICE_SIG_PREFIX: Buffer<ArrayBuffer>;
 export declare const WA_DEFAULT_EPHEMERAL: number;
+export declare const BIZ_BOT_SUPPORT_PAYLOAD = "{\"version\":1,\"is_ai_message\":true,\"should_upload_client_logs\":false,\"should_show_system_message\":false,\"ticket_id\":\"7004947587700716\",\"citation_items\":[],\"ticket_locale\":\"us\"}";
 /** Status messages older than 24 hours are considered expired */
 export declare const STATUS_EXPIRY_SECONDS: number;
 /** WA Web enforces a 14-day maximum age for placeholder resend requests */

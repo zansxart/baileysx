@@ -22,6 +22,9 @@ export const WA_ADV_HOSTED_DEVICE_SIG_PREFIX = Buffer.from([6, 6])
 
 export const WA_DEFAULT_EPHEMERAL = 7 * 24 * 60 * 60
 
+export const BIZ_BOT_SUPPORT_PAYLOAD =
+	'{"version":1,"is_ai_message":true,"should_upload_client_logs":false,"should_show_system_message":false,"ticket_id":"7004947587700716","citation_items":[],"ticket_locale":"us"}'
+
 /** Status messages older than 24 hours are considered expired */
 export const STATUS_EXPIRY_SECONDS = 24 * 60 * 60
 
@@ -89,7 +92,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	bypassViewOnce: false,
 	aiChat: true,
 	aiBotName: undefined as string | undefined,
-	aiBotJid: '867051314767696@bot',
+	aiBotJid: undefined as string | undefined,
 
 	options: {},
 	appStateMacVerification: {
