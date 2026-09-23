@@ -88,7 +88,7 @@ export const DEFAULT_CONNECTION_CONFIG: SocketConfig = {
 	enableRecentMessageCache: true,
 	bypassViewOnce: false,
 	aiChat: true,
-	aiBotName: 'Meta AI',
+	aiBotName: undefined as string | undefined,
 	aiBotJid: '867051314767696@bot',
 
 	options: {},
