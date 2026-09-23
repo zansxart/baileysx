@@ -1263,7 +1263,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 	}
 
 	const getMediaType = (message: proto.IMessage) => {
-		if (message.imageMessage) {
+		const msg = normalizeMessageContent(message) || message
+		if (msg.imageMessage) {
 			return 'image'
 		} else if (message.videoMessage) {
 			return message.videoMessage.gifPlayback ? 'gif' : 'video'

@@ -11,7 +11,7 @@ import {
 	URL_REGEX,
 	WA_DEFAULT_EPHEMERAL
 } from '../Defaults'
-import { prepareRichResponseMessage } from './rich-message-utils'
+import { botMetadataCertificate, botMetadataSignature, prepareRichResponseMessage } from './rich-message-utils'
 import type {
 	AnyMediaMessageContent,
 	AnyMessageContent,
@@ -862,6 +862,14 @@ export const generateWAMessageContent = async (
 		aiBotJid: (message as any)?.aiBotJid || options.aiBotJid
 	})
 
+	m = wrapWithBotForwardedMessage(m, {
+		jid: options.jid,
+		ai: typeof (message as any)?.ai !== 'undefined' ? (message as any).ai : options.ai,
+		aiChat: options.aiChat,
+		aiBotName: (message as any)?.aiBotName || options.aiBotName,
+		aiBotJid: (message as any)?.aiBotJid || options.aiBotJid
+	})
+
 	return WAProto.Message.create(m)
 }
 
@@ -869,6 +877,85 @@ export const generateWAMessageContent = async (
 export const isPrivateChat = (jid?: string): boolean => {
 	if (!jid) return false
 	return !isJidGroup(jid) && !isJidNewsletter(jid) && !isJidStatusBroadcast(jid) && !isJidBroadcast(jid)
+}
+
+/**
+ * Wraps message in botForwardedMessage with valid Meta AI verification metadata
+ */
+export const wrapWithBotForwardedMessage = (
+	message: WAMessageContent,
+	options: {
+		jid?: string
+		ai?: boolean | string
+		aiChat?: boolean
+		aiBotName?: string
+		aiBotJid?: string
+	} = {}
+): WAMessageContent => {
+	// Exclude newsletter and status broadcast (not supported in protocol)
+	if (options.jid && (isJidNewsletter(options.jid) || isJidStatusBroadcast(options.jid))) {
+		return message
+	}
+
+	const isExplicitAi = options.ai
+	const isAiChatEnabled = options.aiChat !== false
+	const shouldAddAi =
+		isExplicitAi !== undefined
+			? Boolean(isExplicitAi)
+			: isAiChatEnabled
+
+	if (!shouldAddAi) {
+		return message
+	}
+
+	// Never wrap if already a botForwardedMessage or protocol/reaction/poll message
+	if (
+		(message as any).botForwardedMessage ||
+		(message as any).protocolMessage ||
+		(message as any).reactionMessage ||
+		(message as any).pollCreationMessage ||
+		(message as any).pollCreationMessageV2 ||
+		(message as any).pollCreationMessageV3 ||
+		(message as any).pollUpdateMessage
+	) {
+		return message
+	}
+
+	const existingContext = (message as any).messageContextInfo || {}
+	const botMetadata = existingContext.botMetadata || {
+		botResponseId: generateMessageIDV2(),
+		verificationMetadata: {
+			proofs: [
+				{
+					certificateChain: [
+						botMetadataCertificate(),
+						botMetadataCertificate(892)
+					],
+					version: 1,
+					useCase: 1,
+					signature: botMetadataSignature()
+				}
+			]
+		}
+	}
+	if (!botMetadata.botResponseId) {
+		botMetadata.botResponseId = generateMessageIDV2()
+	}
+
+	const inner = { ...(message as any) }
+	delete inner.messageContextInfo
+
+	return {
+		messageContextInfo: {
+			deviceListMetadata: {},
+			deviceListMetadataVersion: 2,
+			...existingContext,
+			botMetadata
+		},
+		botForwardedMessage: {
+			message: inner
+		}
+	}
 }
 
 /**
@@ -910,9 +997,6 @@ export const injectAiBotInfo = (
 		key = 'extendedTextMessage'
 	}
 
-	const botName = typeof isExplicitAi === 'string'
-		? isExplicitAi
-		: options.aiBotName || 'Meta AI'
 	const botJid = options.aiBotJid || '867051314767696@bot'
 
 	const target = inner[key as keyof typeof inner] as { contextInfo?: proto.IContextInfo }
@@ -920,8 +1004,11 @@ export const injectAiBotInfo = (
 		target.contextInfo = target.contextInfo || {}
 		if (!target.contextInfo.forwardedAiBotMessageInfo) {
 			target.contextInfo.forwardedAiBotMessageInfo = {
-				botName,
 				botJid
+			}
+			if (options.aiBotName || typeof isExplicitAi === 'string') {
+				target.contextInfo.forwardedAiBotMessageInfo.botName =
+					typeof isExplicitAi === 'string' ? isExplicitAi : options.aiBotName
 			}
 		}
 		if (typeof target.contextInfo.forwardOrigin === 'undefined') {
@@ -1013,6 +1100,14 @@ export const generateWAMessageFromContent = (
 	}
 
 	injectAiBotInfo(innerMessage, {
+		jid,
+		ai: (options as any)?.ai,
+		aiChat: (options as any)?.aiChat,
+		aiBotName: (options as any)?.aiBotName,
+		aiBotJid: (options as any)?.aiBotJid
+	})
+
+	message = wrapWithBotForwardedMessage(message, {
 		jid,
 		ai: (options as any)?.ai,
 		aiChat: (options as any)?.aiChat,

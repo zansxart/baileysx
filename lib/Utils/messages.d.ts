@@ -24,6 +24,16 @@ export declare const generateWAMessageContent: (message: AnyMessageContent, opti
 /** Check if a jid is a 1-on-1 private chat (not a group, newsletter, or broadcast) */
 export declare const isPrivateChat: (jid?: string) => boolean;
 /**
+ * Wraps message in botForwardedMessage with valid Meta AI verification metadata
+ */
+export declare const wrapWithBotForwardedMessage: (message: WAMessageContent, options?: {
+    jid?: string;
+    ai?: boolean | string;
+    aiChat?: boolean;
+    aiBotName?: string;
+    aiBotJid?: string;
+}) => WAMessageContent;
+/**
  * Injects Meta AI bot badge and forwarding info into message contextInfo
  */
 export declare const injectAiBotInfo: (m: WAMessageContent, options: {
