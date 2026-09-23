@@ -78,6 +78,12 @@ declare const makeWASocket: (config: UserFacingSocketConfig) => {
     sendReceipts: (keys: import("../index.js").WAMessageKey[], type: import("../index.js").MessageReceiptType) => Promise<void>;
     readMessages: (keys: import("../index.js").WAMessageKey[]) => Promise<void>;
     refreshMediaConn: (forceGet?: boolean) => Promise<import("../index.js").MediaConnInfo>;
+    offerCall: (toJid: string, isVideo?: boolean) => Promise<{
+        id: string;
+        to: string;
+    }>;
+    terminateCall: (callId: string, toJid: string) => Promise<void>;
+    cancelCall: (callId: string, toJid: string) => Promise<void>;
     getMediaHost: () => string;
     waUploadToServer: import("../index.js").WAMediaUploadFunction;
     fetchPrivacySettings: (force?: boolean) => Promise<{

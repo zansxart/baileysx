@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto'
 import NodeCache from '@cacheable/node-cache'
 import { Boom } from '@hapi/boom'
 import { proto } from '../../WAProto/index.js'
@@ -1350,6 +1351,130 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 	const waitForMsgMediaUpdate = bindWaitForEvent(ev, 'messages.media-update')
 
+	const offerCall = async (toJid: string, isVideo: boolean = false) => {
+		const meId = assertMeId(authState.creds)
+		const callId = randomBytes(16)
+			.toString('hex')
+			.toUpperCase()
+			.substring(0, 64)
+
+		const offerContent: BinaryNode[] = []
+		offerContent.push({
+			tag: 'audio',
+			attrs: { enc: 'opus', rate: '16000' },
+			content: undefined
+		})
+		offerContent.push({
+			tag: 'audio',
+			attrs: { enc: 'opus', rate: '8000' },
+			content: undefined
+		})
+		if (isVideo) {
+			offerContent.push({
+				tag: 'video',
+				attrs: {
+					enc: 'vp8',
+					dec: 'vp8',
+					orientation: '0',
+					screen_width: '1920',
+					screen_height: '1080',
+					device_orientation: '0'
+				},
+				content: undefined
+			})
+		}
+		offerContent.push({
+			tag: 'net',
+			attrs: { medium: '3' },
+			content: undefined
+		})
+		offerContent.push({
+			tag: 'capability',
+			attrs: { ver: '1' },
+			content: new Uint8Array([1, 4, 255, 131, 207, 4])
+		})
+		offerContent.push({
+			tag: 'encopt',
+			attrs: { keygen: '2' },
+			content: undefined
+		})
+
+		const encKey = randomBytes(32)
+		const rawDevices = await getUSyncDevices([toJid], true, false)
+		const isLid = toJid.endsWith('@lid')
+		const devices = rawDevices.length
+			? rawDevices.map(({ user, device }) => jidEncode(user, isLid ? 'lid' : 's.whatsapp.net', device))
+			: [toJid]
+
+		await assertSessions(devices, true)
+		const { nodes: destinations, shouldIncludeDeviceIdentity } =
+			await createParticipantNodes(
+				devices,
+				{ call: { callKey: new Uint8Array(encKey) } },
+				{ count: '0' }
+			)
+
+		offerContent.push({ tag: 'destination', attrs: {}, content: destinations })
+
+		if (shouldIncludeDeviceIdentity) {
+			offerContent.push({
+				tag: 'device-identity',
+				attrs: {},
+				content: encodeSignedDeviceIdentity(
+					authState.creds.account!,
+					true
+				)
+			})
+		}
+
+		const stanza: BinaryNode = {
+			tag: 'call',
+			attrs: {
+				id: generateMessageIDV2(sock.user?.id),
+				to: toJid
+			},
+			content: [
+				{
+					tag: 'offer',
+					attrs: {
+						'call-id': callId,
+						'call-creator': meId
+					},
+					content: offerContent
+				}
+			]
+		}
+
+		await query(stanza)
+		return {
+			id: callId,
+			to: toJid
+		}
+	}
+
+	const terminateCall = async (callId: string, toJid: string) => {
+		const meId = assertMeId(authState.creds)
+		const stanza: BinaryNode = {
+			tag: 'call',
+			attrs: {
+				from: meId,
+				to: toJid
+			},
+			content: [
+				{
+					tag: 'terminate',
+					attrs: {
+						'call-id': callId,
+						'call-creator': meId,
+						count: '0'
+					},
+					content: undefined
+				}
+			]
+		}
+		await query(stanza)
+	}
+
 	registerSocketEndHandler(() => {
 		if (!config.userDevicesCache && userDevicesCache.close) {
 			userDevicesCache.close()
@@ -1372,6 +1497,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		sendReceipts,
 		readMessages,
 		refreshMediaConn,
+		offerCall,
+		terminateCall,
+		cancelCall: terminateCall,
 		// Function (not getter) so the spread in chats.ts preserves the live closure binding.
 		getMediaHost: () => mediaHost,
 		waUploadToServer,

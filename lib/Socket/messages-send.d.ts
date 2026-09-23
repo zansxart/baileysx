@@ -17,6 +17,12 @@ export declare const makeMessagesSocket: (config: SocketConfig) => {
     sendReceipts: (keys: WAMessageKey[], type: MessageReceiptType) => Promise<void>;
     readMessages: (keys: WAMessageKey[]) => Promise<void>;
     refreshMediaConn: (forceGet?: boolean) => Promise<MediaConnInfo>;
+    offerCall: (toJid: string, isVideo?: boolean) => Promise<{
+        id: string;
+        to: string;
+    }>;
+    terminateCall: (callId: string, toJid: string) => Promise<void>;
+    cancelCall: (callId: string, toJid: string) => Promise<void>;
     getMediaHost: () => string;
     waUploadToServer: import("../Types/index.js").WAMediaUploadFunction;
     fetchPrivacySettings: (force?: boolean) => Promise<{
