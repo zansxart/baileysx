@@ -1,5 +1,5 @@
 import { Boom } from '@hapi/boom'
-import { exec } from 'child_process'
+import { exec, spawn } from 'child_process'
 import * as Crypto from 'crypto'
 import { once } from 'events'
 import { createReadStream, createWriteStream, promises as fs, WriteStream } from 'fs'
@@ -239,10 +239,133 @@ export async function getAudioDuration(buffer: Buffer | string | Readable) {
 }
 
 /**
+ * Generates a realistic synthetic audio envelope waveform with natural fluctuations (64 bars).
+ */
+export const generateFallbackWaveform = (length = 64): Uint8Array => {
+	const waveform = new Uint8Array(length)
+	for (let i = 0; i < length; i++) {
+		const env = Math.sin((i / length) * Math.PI)
+		const variation = Math.sin(i * 0.45) * 0.3 + Math.cos(i * 0.85) * 0.2 + 0.5
+		const pseudoNoise = (((i * 37) % 23) / 23) * 0.3
+		const value = Math.max(5, Math.min(95, Math.round((env * 0.6 + variation * 0.3 + pseudoNoise) * 85)))
+		waveform[i] = value
+	}
+	return waveform
+}
+
+/**
+ * Normalizes and resamples any waveform array or buffer into a target length Uint8Array.
+ */
+export const formatWaveform = (waveform: Uint8Array | Buffer | number[], targetLength = 64): Uint8Array => {
+	const arr = Array.from(waveform)
+	if (arr.length === 0) {
+		return generateFallbackWaveform(targetLength)
+	}
+	if (arr.length === targetLength) {
+		return new Uint8Array(arr.map(v => Math.min(100, Math.max(0, Math.round(v)))))
+	}
+	// Resample array to targetLength
+	const resampled = new Uint8Array(targetLength)
+	for (let i = 0; i < targetLength; i++) {
+		const srcIdx = (i / (targetLength - 1)) * (arr.length - 1)
+		const low = Math.floor(srcIdx)
+		const high = Math.min(arr.length - 1, Math.ceil(srcIdx))
+		const weight = srcIdx - low
+		const val = arr[low]! * (1 - weight) + arr[high]! * weight
+		resampled[i] = Math.min(100, Math.max(0, Math.round(val)))
+	}
+	return resampled
+}
+
+const pcmToWaveform = (buf: Buffer, samples = 64): Uint8Array | null => {
+	if (!buf || buf.length < 2) return null
+	const int16Count = Math.floor(buf.length / 2)
+	if (int16Count === 0) return null
+	const blockSize = Math.max(1, Math.floor(int16Count / samples))
+	const filteredData: number[] = []
+	for (let i = 0; i < samples; i++) {
+		const blockStart = blockSize * i
+		let sum = 0
+		let count = 0
+		for (let j = 0; j < blockSize && blockStart + j < int16Count; j++) {
+			const idx = (blockStart + j) * 2
+			sum += Math.abs(buf.readInt16LE(idx))
+			count++
+		}
+		filteredData.push(count > 0 ? sum / count : 0)
+	}
+	const max = Math.max(...filteredData)
+	if (max === 0) return null
+	const multiplier = 100 / max
+	return new Uint8Array(filteredData.map(n => Math.min(100, Math.max(0, Math.floor(n * multiplier)))))
+}
+
+const extractWaveformWithFfmpeg = async (
+	input: Buffer | string | Readable,
+	samples = 64
+): Promise<Uint8Array | null> => {
+	return new Promise(resolve => {
+		const isPath = typeof input === 'string'
+		const args = ['-i', isPath ? input : '-', '-vn', '-ac', '1', '-filter:a', 'aresample=8000', '-f', 's16le', '-']
+		const child = spawn('ffmpeg', args)
+		const chunks: Buffer[] = []
+		let finished = false
+
+		const finish = (result: Uint8Array | null) => {
+			if (!finished) {
+				finished = true
+				resolve(result)
+			}
+		}
+
+		// 10s timeout
+		const timer = setTimeout(() => {
+			try {
+				child.kill()
+			} catch {}
+			finish(null)
+		}, 10_000)
+
+		child.stdout.on('data', chunk => chunks.push(chunk))
+		child.on('error', () => {
+			clearTimeout(timer)
+			finish(null)
+		})
+		child.on('close', code => {
+			clearTimeout(timer)
+			if (code !== 0) return finish(null)
+			const buf = Buffer.concat(chunks)
+			finish(pcmToWaveform(buf, samples))
+		})
+
+		if (!isPath) {
+			if (Buffer.isBuffer(input)) {
+				child.stdin.end(input)
+			} else if (input && typeof (input as any).pipe === 'function') {
+				(input as any).pipe(child.stdin)
+			} else {
+				child.stdin.end()
+			}
+		}
+	})
+}
+
+/**
   referenced from and modifying https://github.com/wppconnect-team/wa-js/blob/main/src/chat/functions/prepareAudioWaveform.ts
  */
-export async function getAudioWaveform(buffer: Buffer | string | Readable, logger?: ILogger) {
+export async function getAudioWaveform(buffer: Buffer | string | Readable, logger?: ILogger): Promise<Uint8Array> {
 	try {
+		// 1. Try ffmpeg (fastest, supports ogg/opus, mp3, m4a, wav, etc.)
+		const ffmpegWf = await extractWaveformWithFfmpeg(buffer, 64)
+		if (ffmpegWf && ffmpegWf.length === 64) {
+			return ffmpegWf
+		}
+	} catch (err) {
+		logger?.debug({ err }, 'ffmpeg waveform extraction failed')
+	}
+
+	try {
+		// 2. Try audio-decode if available
 		// @ts-ignore
 		const { default: decoder } = await import('audio-decode')
 		let audioData: Buffer
@@ -280,8 +403,11 @@ export async function getAudioWaveform(buffer: Buffer | string | Readable, logge
 
 		return waveform
 	} catch (e) {
-		logger?.debug('Failed to generate waveform: ' + e)
+		logger?.debug('Failed to generate waveform via audio-decode: ' + e)
 	}
+
+	// 3. Fallback to procedural speech envelope waveform (guarantees voice notes never have a flat line)
+	return generateFallbackWaveform(64)
 }
 
 export const toReadable = (buffer: Buffer) => {

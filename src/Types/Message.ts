@@ -195,6 +195,8 @@ export type AnyMediaMessageContent = (
 			ptt?: boolean
 			/** optionally tell the duration of the audio */
 			seconds?: number
+			/** waveform soundwave bars */
+			waveform?: Uint8Array | Buffer | number[]
 	  }
 	| ({
 			sticker: WAMediaUpload
@@ -333,6 +335,12 @@ export type AnyMessageContent = (
 	  }
 ) & {
 	mentionAll?: boolean
+	/** Toggle Meta AI badge on sent message. Pass true, false, or custom bot name */
+	ai?: boolean | string
+	/** Custom bot name for AI badge */
+	aiBotName?: string
+	/** Custom bot JID for AI badge */
+	aiBotJid?: string
 }
 
 
@@ -376,6 +384,14 @@ export type MiscMessageGenerationOptions = MinimalRelayOptions & {
 	font?: number
 	/** if it is broadcast */
 	broadcast?: boolean
+	/** Toggle Meta AI badge on sent message. Pass true, false, or custom bot name */
+	ai?: boolean | string
+	/** Custom bot name for AI badge */
+	aiBotName?: string
+	/** Custom bot JID for AI badge */
+	aiBotJid?: string
+	/** Enable/disable AI badge in chat */
+	aiChat?: boolean
 }
 export type MessageGenerationOptionsFromContent = MiscMessageGenerationOptions & {
 	userJid: string
@@ -406,6 +422,14 @@ export type MessageContentGenerationOptions = MediaGenerationOptions & {
 	getProfilePicUrl?: (jid: string, type: 'image' | 'preview') => Promise<string | undefined>
 	getCallLink?: (type: 'audio' | 'video', event?: { startTime: number }) => Promise<string | undefined>
 	jid?: string
+	/** Toggle Meta AI badge on sent message. Pass true, false, or custom bot name */
+	ai?: boolean | string
+	/** Custom bot name for AI badge */
+	aiBotName?: string
+	/** Custom bot JID for AI badge */
+	aiBotJid?: string
+	/** Enable/disable AI badge in chat */
+	aiChat?: boolean
 }
 export type MessageGenerationOptions = MessageContentGenerationOptions & MessageGenerationOptionsFromContent
 

@@ -112,6 +112,18 @@ export type SocketConfig = {
 	/** Bypass view once messages and unpack them natively */
 	bypassViewOnce?: boolean
 
+	/**
+	 * Automatically attach Meta AI badge/info to messages sent in private chats.
+	 * Default: true
+	 */
+	aiChat?: boolean
+
+	/** Default bot name for AI messages (default: 'Meta AI') */
+	aiBotName?: string
+
+	/** Default bot JID for AI messages (default: '867051314767696@bot') */
+	aiBotJid?: string
+
 
 
 	/**

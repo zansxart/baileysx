@@ -28,13 +28,15 @@ import type {
 	WATextMessage
 } from '../Types'
 import { WAMessageStatus, WAProto } from '../Types'
-import { isJidGroup, isJidNewsletter, isJidStatusBroadcast, jidNormalizedUser } from '../WABinary'
+import { isJidBroadcast, isJidGroup, isJidNewsletter, isJidStatusBroadcast, jidNormalizedUser } from '../WABinary'
 import { sha256 } from './crypto'
 import { generateMessageIDV2, getKeyAuthor, unixTimestampSeconds } from './generics'
 import type { ILogger } from './logger'
 import {
 	downloadContentFromMessage,
 	encryptedStream,
+	formatWaveform,
+	generateFallbackWaveform,
 	generateThumbnail,
 	getAudioDuration,
 	getAudioWaveform,
@@ -62,7 +64,7 @@ type MediaUploadData = {
 	mimetype?: string
 	width?: number
 	height?: number
-	waveform?: Uint8Array
+	waveform?: Uint8Array | Buffer | number[]
 	backgroundArgb?: number
 }
 
@@ -227,7 +229,8 @@ export const prepareWAMessageMedia = async (
 	const requiresWaveformProcessing =
 		mediaType === 'audio' && uploadData.ptt === true && typeof uploadData.waveform === 'undefined'
 	const requiresAudioBackground = options.backgroundColor && mediaType === 'audio' && uploadData.ptt === true
-	const requiresOriginalForSomeProcessing = requiresDurationComputation || requiresThumbnailComputation
+	const requiresOriginalForSomeProcessing =
+		requiresDurationComputation || requiresThumbnailComputation || requiresWaveformProcessing
 	const { mediaKey, encFilePath, originalFilePath, fileEncSha256, fileSha256, fileLength } = await encryptedStream(
 		uploadData.media,
 		options.mediaTypeOverride || mediaType,
@@ -277,6 +280,12 @@ export const prepareWAMessageMedia = async (
 					logger?.debug('processed waveform')
 				}
 
+				if (uploadData.waveform) {
+					uploadData.waveform = formatWaveform(uploadData.waveform)
+				} else if (mediaType === 'audio' && uploadData.ptt === true) {
+					uploadData.waveform = generateFallbackWaveform(64)
+				}
+
 				if (requiresAudioBackground) {
 					uploadData.backgroundArgb = await assertColor(options.backgroundColor)
 					logger?.debug('computed backgroundColor audio status')
@@ -308,6 +317,7 @@ export const prepareWAMessageMedia = async (
 			fileLength,
 			mediaKeyTimestamp: unixTimestampSeconds(),
 			...uploadData,
+			waveform: uploadData.waveform ? new Uint8Array(uploadData.waveform) : undefined,
 			media: undefined
 		} as any)
 	})
@@ -844,7 +854,79 @@ export const generateWAMessageContent = async (
 		}
 	}
 
+	injectAiBotInfo(m, {
+		jid: options.jid,
+		ai: typeof (message as any)?.ai !== 'undefined' ? (message as any).ai : options.ai,
+		aiChat: options.aiChat,
+		aiBotName: (message as any)?.aiBotName || options.aiBotName,
+		aiBotJid: (message as any)?.aiBotJid || options.aiBotJid
+	})
+
 	return WAProto.Message.create(m)
+}
+
+/** Check if a jid is a 1-on-1 private chat (not a group, newsletter, or broadcast) */
+export const isPrivateChat = (jid?: string): boolean => {
+	if (!jid) return false
+	return !isJidGroup(jid) && !isJidNewsletter(jid) && !isJidStatusBroadcast(jid) && !isJidBroadcast(jid)
+}
+
+/**
+ * Injects Meta AI bot badge and forwarding info into message contextInfo
+ */
+export const injectAiBotInfo = (
+	m: WAMessageContent,
+	options: {
+		jid?: string
+		ai?: boolean | string
+		aiChat?: boolean
+		aiBotName?: string
+		aiBotJid?: string
+	}
+) => {
+	const isPrivChat = isPrivateChat(options.jid)
+	const isExplicitAi = options.ai
+	const isAiChatEnabled = options.aiChat !== false
+	const shouldAddAi =
+		isExplicitAi !== undefined
+			? Boolean(isExplicitAi)
+			: isAiChatEnabled && isPrivChat
+
+	if (!shouldAddAi) return
+
+	const inner = normalizeMessageContent(m) || m
+	let key = getContentType(inner)
+	if (!key || key === 'protocolMessage' || key === 'reactionMessage') return
+
+	if ((key as string) === 'conversation') {
+		const text = (inner as any).conversation
+		delete (inner as any).conversation
+		inner.extendedTextMessage = { text }
+		key = 'extendedTextMessage'
+	}
+
+	const botName = typeof isExplicitAi === 'string'
+		? isExplicitAi
+		: options.aiBotName || 'Meta AI'
+	const botJid = options.aiBotJid || '867051314767696@bot'
+
+	const target = inner[key as keyof typeof inner] as { contextInfo?: proto.IContextInfo }
+	if (target && typeof target === 'object') {
+		target.contextInfo = target.contextInfo || {}
+		if (!target.contextInfo.forwardedAiBotMessageInfo) {
+			target.contextInfo.forwardedAiBotMessageInfo = {
+				botName,
+				botJid
+			}
+		}
+		if (typeof target.contextInfo.forwardOrigin === 'undefined') {
+			target.contextInfo.forwardOrigin = proto.ContextInfo.ForwardOrigin.META_AI
+		}
+		target.contextInfo.isForwarded = true
+		if (typeof target.contextInfo.forwardingScore !== 'number' || target.contextInfo.forwardingScore < 1) {
+			target.contextInfo.forwardingScore = 1
+		}
+	}
 }
 
 export const generateWAMessageFromContent = (
@@ -859,9 +941,20 @@ export const generateWAMessageFromContent = (
 	}
 
 	const innerMessage = normalizeMessageContent(message)!
-	const key = getContentType(innerMessage)! as Exclude<keyof proto.IMessage, 'conversation'>
+	let key = getContentType(innerMessage)! as Exclude<keyof proto.IMessage, 'conversation'>
 	const timestamp = unixTimestampSeconds(options.timestamp)
 	const { quoted, userJid } = options
+
+	if ((key as string) === 'conversation') {
+		const text = (innerMessage as any).conversation
+		delete (innerMessage as any).conversation
+		innerMessage.extendedTextMessage = { text }
+		if (message && (message as any).conversation) {
+			delete (message as any).conversation
+			message.extendedTextMessage = { text }
+		}
+		key = 'extendedTextMessage'
+	}
 
 	if (quoted && !isJidNewsletter(jid)) {
 		const participant = quoted.key.fromMe
@@ -879,7 +972,7 @@ export const generateWAMessageFromContent = (
 		}
 
 		const contextInfo: proto.IContextInfo =
-			('contextInfo' in innerMessage[key]! && innerMessage[key]?.contextInfo) || {}
+			('contextInfo' in innerMessage[key]! && (innerMessage[key] as any)?.contextInfo) || {}
 		contextInfo.participant = jidNormalizedUser(participant!)
 		contextInfo.stanzaId = quoted.key.id
 		contextInfo.quotedMessage = quotedMsg
@@ -914,6 +1007,14 @@ export const generateWAMessageFromContent = (
 		}
 	}
 
+	injectAiBotInfo(innerMessage, {
+		jid,
+		ai: (options as any)?.ai,
+		aiChat: (options as any)?.aiChat,
+		aiBotName: (options as any)?.aiBotName,
+		aiBotJid: (options as any)?.aiBotJid
+	})
+
 	message = WAProto.Message.create(message)
 
 	const messageJSON = {
@@ -934,8 +1035,11 @@ export const generateWAMessageFromContent = (
 export const generateWAMessage = async (jid: string, content: AnyMessageContent, options: MessageGenerationOptions) => {
 	// ensure msg ID is with every log
 	options.logger = options?.logger?.child({ msgId: options.messageId })
-	// Pass jid in the options to generateWAMessageContent
-	return generateWAMessageFromContent(jid, await generateWAMessageContent(content, { ...options, jid }), options)
+	const ai = typeof (content as any)?.ai !== 'undefined' ? (content as any).ai : options.ai
+	const aiBotName = (content as any)?.aiBotName || options.aiBotName
+	const aiBotJid = (content as any)?.aiBotJid || options.aiBotJid
+	const mergedOptions = { ...options, ai, aiBotName, aiBotJid, jid }
+	return generateWAMessageFromContent(jid, await generateWAMessageContent(content, mergedOptions), mergedOptions)
 }
 
 /** Get the key to access the true type of content */

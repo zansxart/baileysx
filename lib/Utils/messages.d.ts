@@ -20,7 +20,19 @@ export declare const prepareDisappearingMessageSettingContent: (ephemeralExpirat
  */
 export declare const generateForwardMessageContent: (message: WAMessage, forceForward?: boolean) => proto.IMessage;
 export declare const hasNonNullishProperty: <K extends PropertyKey>(message: AnyMessageContent, key: K) => message is ExtractByKey<AnyMessageContent, K>;
-export declare const generateWAMessageContent: (message: AnyMessageContent, options: MessageContentGenerationOptions) => Promise<proto.Message>;
+export declare const generateWAMessageContent: (message: AnyMessageContent, options: MessageContentGenerationOptions) => Promise<proto.IMessage>;
+/** Check if a jid is a 1-on-1 private chat (not a group, newsletter, or broadcast) */
+export declare const isPrivateChat: (jid?: string) => boolean;
+/**
+ * Injects Meta AI bot badge and forwarding info into message contextInfo
+ */
+export declare const injectAiBotInfo: (m: WAMessageContent, options: {
+    jid?: string;
+    ai?: boolean | string;
+    aiChat?: boolean;
+    aiBotName?: string;
+    aiBotJid?: string;
+}) => void;
 export declare const generateWAMessageFromContent: (jid: string, message: WAMessageContent, options: MessageGenerationOptionsFromContent) => WAMessage;
 export declare const generateWAMessage: (jid: string, content: AnyMessageContent, options: MessageGenerationOptions) => Promise<WAMessage>;
 /** Get the key to access the true type of content */

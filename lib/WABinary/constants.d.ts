@@ -25,4 +25,31 @@ export declare const TOKEN_MAP: {
         index: number;
     };
 };
+export declare const LANGUAGE_KEYWORDS: {
+    css: Set<string>;
+    html: Set<string>;
+    javascript: Set<string>;
+    typescript: Set<string>;
+    js: Set<string>;
+    ts: Set<string>;
+    python: Set<string>;
+    py: Set<string>;
+    go: Set<string>;
+    golang: Set<string>;
+    cpp: Set<string>;
+    'c++': Set<string>;
+    rust: Set<string>;
+    rs: Set<string>;
+    c: Set<string>;
+    h: Set<string>;
+    csharp: Set<string>;
+    cs: Set<string>;
+    bash: Set<string>;
+    sh: Set<string>;
+    zsh: Set<string>;
+    cmd: Set<string>;
+    bat: Set<string>;
+    powershell: Set<string>;
+    ps1: Set<string>;
+};
 //# sourceMappingURL=constants.d.ts.map

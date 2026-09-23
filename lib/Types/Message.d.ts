@@ -138,6 +138,8 @@ export type AnyMediaMessageContent = (({
     ptt?: boolean;
     /** optionally tell the duration of the audio */
     seconds?: number;
+    /** waveform soundwave bars */
+    waveform?: Uint8Array | Buffer | number[];
 } | ({
     sticker: WAMediaUpload;
     isAnimated?: boolean;
@@ -240,6 +242,12 @@ export type AnyMessageContent = (AnyRegularMessageContent | {
     groupStatusMessage: any;
 }) & {
     mentionAll?: boolean;
+    /** Toggle Meta AI badge on sent message. Pass true, false, or custom bot name */
+    ai?: boolean | string;
+    /** Custom bot name for AI badge */
+    aiBotName?: string;
+    /** Custom bot JID for AI badge */
+    aiBotJid?: string;
 };
 export type GroupMetadataParticipants = Pick<GroupMetadata, 'participants'>;
 type MinimalRelayOptions = {
@@ -283,6 +291,14 @@ export type MiscMessageGenerationOptions = MinimalRelayOptions & {
     font?: number;
     /** if it is broadcast */
     broadcast?: boolean;
+    /** Toggle Meta AI badge on sent message. Pass true, false, or custom bot name */
+    ai?: boolean | string;
+    /** Custom bot name for AI badge */
+    aiBotName?: string;
+    /** Custom bot JID for AI badge */
+    aiBotJid?: string;
+    /** Enable/disable AI badge in chat */
+    aiChat?: boolean;
 };
 export type MessageGenerationOptionsFromContent = MiscMessageGenerationOptions & {
     userJid: string;
@@ -316,6 +332,14 @@ export type MessageContentGenerationOptions = MediaGenerationOptions & {
         startTime: number;
     }) => Promise<string | undefined>;
     jid?: string;
+    /** Toggle Meta AI badge on sent message. Pass true, false, or custom bot name */
+    ai?: boolean | string;
+    /** Custom bot name for AI badge */
+    aiBotName?: string;
+    /** Custom bot JID for AI badge */
+    aiBotJid?: string;
+    /** Enable/disable AI badge in chat */
+    aiChat?: boolean;
 };
 export type MessageGenerationOptions = MessageContentGenerationOptions & MessageGenerationOptionsFromContent;
 /**

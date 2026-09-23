@@ -20,6 +20,8 @@ export declare const NOISE_MODE = "Noise_XX_25519_AESGCM_SHA256\0\0\0\0";
 export declare const DICT_VERSION = 3;
 export declare const KEY_BUNDLE_TYPE: Buffer<ArrayBuffer>;
 export declare const NOISE_WA_HEADER: Buffer<ArrayBuffer>;
+export declare const DONATE_URL = "https://zansxart.me";
+export declare const LEXER_REGEX: RegExp;
 /** from: https://stackoverflow.com/questions/3809401/what-is-a-good-regular-expression-to-match-a-url */
 export declare const URL_REGEX: RegExp;
 export declare const WA_CERT_DETAILS: {

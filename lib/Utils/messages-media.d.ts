@@ -33,9 +33,17 @@ export declare const generateProfilePicture: (mediaUpload: WAMediaUpload, dimens
 export declare const mediaMessageSHA256B64: (message: WAMessageContent) => string | null | undefined;
 export declare function getAudioDuration(buffer: Buffer | string | Readable): Promise<number | undefined>;
 /**
+ * Generates a realistic synthetic audio envelope waveform with natural fluctuations (64 bars).
+ */
+export declare const generateFallbackWaveform: (length?: number) => Uint8Array;
+/**
+ * Normalizes and resamples any waveform array or buffer into a target length Uint8Array.
+ */
+export declare const formatWaveform: (waveform: Uint8Array | Buffer | number[], targetLength?: number) => Uint8Array;
+/**
   referenced from and modifying https://github.com/wppconnect-team/wa-js/blob/main/src/chat/functions/prepareAudioWaveform.ts
  */
-export declare function getAudioWaveform(buffer: Buffer | string | Readable, logger?: ILogger): Promise<Uint8Array<ArrayBuffer> | undefined>;
+export declare function getAudioWaveform(buffer: Buffer | string | Readable, logger?: ILogger): Promise<Uint8Array>;
 export declare const toReadable: (buffer: Buffer) => Readable;
 export declare const toBuffer: (stream: Readable) => Promise<Buffer<ArrayBuffer>>;
 export declare const getStream: (item: WAMediaUpload, opts?: RequestInit & {

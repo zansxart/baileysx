@@ -108,8 +108,15 @@ export type SocketConfig = {
     enableRecentMessageCache: boolean;
     /** Bypass view once messages and unpack them natively */
     bypassViewOnce?: boolean;
-    /** Automatically mark received messages as read (blue tick) */
-    autoReadMessages?: boolean;
+    /**
+     * Automatically attach Meta AI badge/info to messages sent in private chats.
+     * Default: true
+     */
+    aiChat?: boolean;
+    /** Default bot name for AI messages (default: 'Meta AI') */
+    aiBotName?: string;
+    /** Default bot JID for AI messages (default: '867051314767696@bot') */
+    aiBotJid?: string;
     /**
      * Returns if a jid should be ignored,
      * no event for that jid will be triggered.

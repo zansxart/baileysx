@@ -1500,6 +1500,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					mediaCache: config.mediaCache,
 					options: config.options,
 					messageId: generateMessageIDV2(sock.user?.id),
+					aiChat: config.aiChat,
+					aiBotName: config.aiBotName,
+					aiBotJid: config.aiBotJid,
 					...options
 				})
 				const isEventMsg = 'event' in content && !!(content as any).event
