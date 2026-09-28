@@ -650,8 +650,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		} = options
 
 		const isPriv = isPrivateChat(jid)
-		const isAiPayload = !!message?.messageContextInfo?.supportPayload?.includes('"is_ai_message":true')
-		if (isPriv && (ai || isAiPayload)) {
+		const isAiDisabled = ai === false || (options as any)?.aiChat === false || (config.aiChat === false && ai !== true)
+		if (isPriv && isAiDisabled && message?.messageContextInfo?.supportPayload) {
+			delete message.messageContextInfo.supportPayload
+		}
+		const isAiPayload = !isAiDisabled && !!message?.messageContextInfo?.supportPayload?.includes('"is_ai_message":true')
+		if (isPriv && !isAiDisabled && (ai || isAiPayload)) {
 			additionalNodes = additionalNodes ? [...additionalNodes] : []
 			const hasBot = additionalNodes.some(n => n.tag === 'bot' && n.attrs?.biz_bot === '1')
 			if (!hasBot) {

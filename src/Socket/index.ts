@@ -9,7 +9,10 @@ const makeWASocket = (config: UserFacingSocketConfig) => {
 		...config
 	}
 
-	return makeCommunitiesSocket(newConfig)
+	const sock = makeCommunitiesSocket(newConfig)
+	;(sock as any).config = newConfig
+	return sock
 }
 
 export default makeWASocket
+
