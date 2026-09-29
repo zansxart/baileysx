@@ -20,6 +20,23 @@ export declare const prepareDisappearingMessageSettingContent: (ephemeralExpirat
  */
 export declare const generateForwardMessageContent: (message: WAMessage, forceForward?: boolean) => proto.IMessage;
 export declare const hasNonNullishProperty: <K extends PropertyKey>(message: AnyMessageContent, key: K) => message is ExtractByKey<AnyMessageContent, K>;
+/**
+ * Converts various button formats (legacy buttons, template buttons, native flow buttons, url/call/copy buttons)
+ * into standard WhatsApp Native Flow buttons (quick_reply, cta_url, cta_copy, cta_call).
+ */
+export declare const convertButtonToNative: (btn: any) => {
+    name: any;
+    buttonParamsJson: any;
+};
+/**
+ * Sanitizes and prepares an interactiveMessage (nativeFlow, payment buttons, carousel, etc.)
+ * into a clean structure that WhatsApp mobile (Android/iOS) and Web can render cleanly without
+ * throwing circular reference errors or falling back to "unsupported version".
+ */
+export declare const prepareInteractiveMessage: (interactiveContent: any, options?: {
+    defaultTextFallback?: string;
+    viewOnce?: boolean;
+}) => proto.IMessage;
 export declare const generateWAMessageContent: (message: AnyMessageContent, options: MessageContentGenerationOptions) => Promise<proto.IMessage>;
 /** Check if a jid is a 1-on-1 private chat (not a group, newsletter, or broadcast) */
 export declare const isPrivateChat: (jid?: string) => boolean;

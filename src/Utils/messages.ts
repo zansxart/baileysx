@@ -409,6 +409,247 @@ function hasOptionalProperty<T, K extends PropertyKey>(obj: T, key: K): obj is W
 	return typeof obj === 'object' && obj !== null && key in obj && (obj as any)[key] !== null
 }
 
+/**
+ * Converts various button formats (legacy buttons, template buttons, native flow buttons, url/call/copy buttons)
+ * into standard WhatsApp Native Flow buttons (quick_reply, cta_url, cta_copy, cta_call).
+ */
+export const convertButtonToNative = (btn: any) => {
+	if (!btn || typeof btn !== 'object') {
+		const text = String(btn || 'Button')
+		return {
+			name: 'quick_reply',
+			buttonParamsJson: JSON.stringify({
+				display_text: text,
+				id: text
+			})
+		}
+	}
+
+	// 1. Already standard native flow format
+	if (btn.name && (btn.buttonParamsJson || btn.paramsJson)) {
+		return {
+			name: btn.name,
+			buttonParamsJson:
+				typeof btn.buttonParamsJson === 'string'
+					? btn.buttonParamsJson
+					: typeof btn.paramsJson === 'string'
+					? btn.paramsJson
+					: JSON.stringify(btn.buttonParamsJson || btn.paramsJson || {})
+		}
+	}
+
+	// 2. Type 4 / nativeFlowInfo format (often used in menu / selection buttons)
+	if (btn.nativeFlowInfo) {
+		return {
+			name: btn.nativeFlowInfo.name || 'quick_reply',
+			buttonParamsJson:
+				typeof btn.nativeFlowInfo.paramsJson === 'string'
+					? btn.nativeFlowInfo.paramsJson
+					: JSON.stringify(btn.nativeFlowInfo.paramsJson || {})
+		}
+	}
+
+	// 3. Hydrated template button formats
+	if (btn.quickReplyButton) {
+		return {
+			name: 'quick_reply',
+			buttonParamsJson: JSON.stringify({
+				display_text: btn.quickReplyButton.displayText || 'Button',
+				id: btn.quickReplyButton.id || ''
+			})
+		}
+	}
+
+	if (btn.urlButton) {
+		const url = btn.urlButton.url || ''
+		return {
+			name: 'cta_url',
+			buttonParamsJson: JSON.stringify({
+				display_text: btn.urlButton.displayText || 'Visit URL',
+				url,
+				merchant_url: url
+			})
+		}
+	}
+
+	if (btn.callButton) {
+		return {
+			name: 'cta_call',
+			buttonParamsJson: JSON.stringify({
+				display_text: btn.callButton.displayText || 'Call',
+				phone_number: btn.callButton.phoneNumber || ''
+			})
+		}
+	}
+
+	// 4. URL / Web button
+	if (btn.url || btn.cta_url) {
+		const url = btn.url || btn.cta_url
+		const text = btn.text || btn.displayText || btn.buttonText?.displayText || 'Visit URL'
+		return {
+			name: 'cta_url',
+			buttonParamsJson: JSON.stringify({
+				display_text: text,
+				url,
+				merchant_url: url
+			})
+		}
+	}
+
+	// 5. Copy code button
+	if (btn.copy || btn.copy_code || btn.cta_copy) {
+		const code = btn.copy || btn.copy_code || btn.cta_copy
+		const text = btn.text || btn.displayText || btn.buttonText?.displayText || 'Copy'
+		return {
+			name: 'cta_copy',
+			buttonParamsJson: JSON.stringify({
+				display_text: text,
+				id: btn.id || btn.buttonId || 'copy',
+				copy_code: code
+			})
+		}
+	}
+
+	// 6. Call button
+	if (btn.call || btn.phoneNumber || btn.cta_call) {
+		const phone = btn.call || btn.phoneNumber || btn.cta_call
+		const text = btn.text || btn.displayText || btn.buttonText?.displayText || 'Call'
+		return {
+			name: 'cta_call',
+			buttonParamsJson: JSON.stringify({
+				display_text: text,
+				phone_number: phone
+			})
+		}
+	}
+
+	// 7. Standard Quick Reply / Response button (legacy Baileys format: buttonId, buttonText)
+	const id = btn.buttonId || btn.id || ''
+	const displayText =
+		btn.buttonText?.displayText || btn.displayText || btn.text || (typeof btn === 'string' ? btn : 'Button')
+
+	return {
+		name: 'quick_reply',
+		buttonParamsJson: JSON.stringify({
+			display_text: displayText,
+			id
+		})
+	}
+}
+
+/**
+ * Sanitizes and prepares an interactiveMessage (nativeFlow, payment buttons, carousel, etc.)
+ * into a clean structure that WhatsApp mobile (Android/iOS) and Web can render cleanly without
+ * throwing circular reference errors or falling back to "unsupported version".
+ */
+export const prepareInteractiveMessage = (
+	interactiveContent: any,
+	options: { defaultTextFallback?: string; viewOnce?: boolean } = {}
+): proto.IMessage => {
+	if (!interactiveContent || typeof interactiveContent !== 'object') {
+		return interactiveContent
+	}
+
+	let unwrappedContext: any = undefined
+	let targetInteractive: any = undefined
+	const isAlreadyViewOnce = Boolean(
+		interactiveContent.viewOnceMessage ||
+		interactiveContent.viewOnceMessageV2
+	)
+
+	if (interactiveContent.viewOnceMessage?.message?.interactiveMessage) {
+		unwrappedContext = interactiveContent.viewOnceMessage.message.messageContextInfo
+		targetInteractive = interactiveContent.viewOnceMessage.message.interactiveMessage
+	} else if (interactiveContent.viewOnceMessageV2?.message?.interactiveMessage) {
+		unwrappedContext = interactiveContent.viewOnceMessageV2.message.messageContextInfo
+		targetInteractive = interactiveContent.viewOnceMessageV2.message.interactiveMessage
+	} else if (interactiveContent.interactiveMessage) {
+		unwrappedContext = interactiveContent.messageContextInfo
+		targetInteractive = interactiveContent.interactiveMessage
+	} else {
+		targetInteractive = interactiveContent
+		unwrappedContext = interactiveContent.messageContextInfo
+	}
+
+	const clean = { ...targetInteractive }
+	const garbageKeys = [
+		'key',
+		'mtype',
+		'chat',
+		'id',
+		'from',
+		'isBaileys',
+		'sender',
+		'fromMe',
+		'text',
+		'mentionedJid',
+		'fakeObj',
+		'vM',
+		'isGroup',
+		'userReceipt',
+		'reactions',
+		'pollUpdates',
+		'eventResponses',
+		'statusMentions',
+		'messageAddOns',
+		'labels',
+		'messageStubParameters',
+		'statusMentionSources',
+		'supportAiCitations'
+	]
+	for (const k of garbageKeys) {
+		delete clean[k]
+	}
+
+	if (clean.header && typeof clean.header.hasMediaAttachment === 'undefined') {
+		clean.header = {
+			...clean.header,
+			hasMediaAttachment: Boolean(
+				clean.header.imageMessage ||
+				clean.header.videoMessage ||
+				clean.header.documentMessage
+			)
+		}
+	}
+
+	if (!clean.body || typeof clean.body.text !== 'string' || clean.body.text.trim() === '') {
+		clean.body = {
+			text: options.defaultTextFallback || clean.body?.text || ' '
+		}
+	}
+
+	const contextInfo: any = {
+		deviceListMetadata: {},
+		deviceListMetadataVersion: 2,
+		...(unwrappedContext && typeof unwrappedContext === 'object' ? unwrappedContext : {})
+	}
+
+	for (const k of garbageKeys) {
+		delete contextInfo[k]
+	}
+
+	if (Array.isArray(contextInfo.threadId) && contextInfo.threadId.length === 0) {
+		delete contextInfo.threadId
+	}
+
+	const shouldWrapViewOnce = options.viewOnce !== false
+	if (shouldWrapViewOnce) {
+		return {
+			viewOnceMessage: {
+				message: {
+					messageContextInfo: contextInfo,
+					interactiveMessage: clean
+				}
+			}
+		}
+	}
+
+	return {
+		messageContextInfo: contextInfo,
+		interactiveMessage: clean
+	}
+}
+
 export const generateWAMessageContent = async (
 	message: AnyMessageContent,
 	options: MessageContentGenerationOptions
@@ -641,37 +882,58 @@ export const generateWAMessageContent = async (
 		m = await prepareWAMessageMedia(anyMsg, options)
 	}
 
-	const ButtonType = proto.Message.ButtonsMessage.HeaderType
+	if (
+		(anyMsg.buttons !== undefined && anyMsg.buttons !== null) ||
+		(anyMsg.interactiveButtons !== undefined && anyMsg.interactiveButtons !== null)
+	) {
+		const rawBtns = anyMsg.buttons || anyMsg.interactiveButtons
+		const nativeButtons = (Array.isArray(rawBtns) ? rawBtns : []).map(convertButtonToNative)
 
-	if (anyMsg.buttons !== undefined && anyMsg.buttons !== null) {
-		const buttonsMessage: proto.Message.IButtonsMessage = {
-			buttons: anyMsg.buttons.map((b: any) => ({ ...b, type: proto.Message.ButtonsMessage.Button.Type.RESPONSE }))
+		const hasMedia = Boolean(
+			m && (m.imageMessage || m.videoMessage || m.documentMessage || m.audioMessage || m.locationMessage)
+		)
+
+		const interactiveMessage: proto.Message.IInteractiveMessage = {
+			body: {
+				text: anyMsg.text || anyMsg.caption || ' '
+			},
+			footer: anyMsg.footer ? { text: anyMsg.footer } : undefined,
+			nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
+				buttons: nativeButtons
+			})
 		}
-		if (anyMsg.text !== undefined && anyMsg.text !== null) {
-			buttonsMessage.contentText = anyMsg.text
-			buttonsMessage.headerType = ButtonType.EMPTY
-		} else {
-			if (anyMsg.caption !== undefined && anyMsg.caption !== null && anyMsg.caption) {
-				buttonsMessage.contentText = anyMsg.caption
+
+		if (hasMedia || anyMsg.title) {
+			interactiveMessage.header = {
+				title: anyMsg.title || undefined,
+				subtitle: anyMsg.subtitle || undefined,
+				hasMediaAttachment: hasMedia,
+				...(hasMedia ? m : {})
 			}
-			const type = Object.keys(m)[0]?.replace('Message', '').toUpperCase()
-			buttonsMessage.headerType = ButtonType[type as keyof typeof ButtonType] || ButtonType.EMPTY
-			Object.assign(buttonsMessage, m)
 		}
-		if (anyMsg.title !== undefined && anyMsg.title !== null && anyMsg.title) {
-			buttonsMessage.text = anyMsg.title
-			buttonsMessage.headerType = ButtonType.TEXT
+
+		if (anyMsg.contextInfo) {
+			interactiveMessage.contextInfo = anyMsg.contextInfo
 		}
-		if (anyMsg.footer !== undefined && anyMsg.footer !== null && anyMsg.footer) {
-			buttonsMessage.footerText = anyMsg.footer
+		if (anyMsg.mentions) {
+			interactiveMessage.contextInfo = {
+				...(interactiveMessage.contextInfo || {}),
+				mentionedJid: anyMsg.mentions
+			}
 		}
-		if (anyMsg.contextInfo !== undefined && anyMsg.contextInfo !== null && anyMsg.contextInfo) {
-			buttonsMessage.contextInfo = anyMsg.contextInfo
-		}
-		if (anyMsg.mentions !== undefined && anyMsg.mentions !== null && anyMsg.mentions) {
-			buttonsMessage.contextInfo = { ...buttonsMessage.contextInfo, mentionedJid: anyMsg.mentions }
-		}
-		m = { buttonsMessage }
+
+		const shouldWrapViewOnce = (anyMsg as any).viewOnce !== false
+		m = prepareInteractiveMessage(interactiveMessage, {
+			viewOnce: shouldWrapViewOnce
+		})
+	} else if ((anyMsg as any).interactive !== undefined && (anyMsg as any).interactive !== null) {
+		m = prepareInteractiveMessage((anyMsg as any).interactive, {
+			viewOnce: (message as any).viewOnce !== false
+		})
+	} else if ((anyMsg as any).interactiveMessage !== undefined && (anyMsg as any).interactiveMessage !== null) {
+		m = prepareInteractiveMessage((anyMsg as any).interactiveMessage, {
+			viewOnce: (message as any).viewOnce !== false
+		})
 	} else if (anyMsg.templateButtons !== undefined && anyMsg.templateButtons !== null) {
 		const msg: any = {
 			hydratedButtons: anyMsg.templateButtons
@@ -705,49 +967,6 @@ export const generateWAMessageContent = async (
 			listType: proto.Message.ListMessage.ListType.SINGLE_SELECT
 		}
 		m = { listMessage }
-	}
-
-	if (anyMsg.interactiveButtons !== undefined && anyMsg.interactiveButtons !== null) {
-		const interactiveMessage: proto.Message.IInteractiveMessage = {
-			nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
-				buttons: anyMsg.interactiveButtons
-			})
-		}
-		if (anyMsg.text !== undefined && anyMsg.text !== null) {
-			interactiveMessage.body = {
-				text: anyMsg.text
-			}
-		} else if (anyMsg.caption !== undefined && anyMsg.caption !== null && anyMsg.caption) {
-			interactiveMessage.body = {
-				text: anyMsg.caption
-			}
-			interactiveMessage.header = {
-				title: anyMsg.title,
-				subtitle: anyMsg.subtitle,
-				hasMediaAttachment: anyMsg.media ?? false,
-				...m
-			}
-		}
-		if (anyMsg.footer !== undefined && anyMsg.footer !== null && anyMsg.footer) {
-			interactiveMessage.footer = {
-				text: anyMsg.footer
-			}
-		}
-		if (anyMsg.title !== undefined && anyMsg.title !== null && anyMsg.title) {
-			interactiveMessage.header = {
-				title: anyMsg.title,
-				subtitle: anyMsg.subtitle,
-				hasMediaAttachment: anyMsg.media ?? false,
-				...m
-			}
-		}
-		if (anyMsg.contextInfo !== undefined && anyMsg.contextInfo !== null && anyMsg.contextInfo) {
-			interactiveMessage.contextInfo = anyMsg.contextInfo
-		}
-		if (anyMsg.mentions !== undefined && anyMsg.mentions !== null && anyMsg.mentions) {
-			interactiveMessage.contextInfo = { ...interactiveMessage.contextInfo, mentionedJid: anyMsg.mentions }
-		}
-		m = { interactiveMessage }
 	}
 
 	if (anyMsg.shop !== undefined && anyMsg.shop !== null) {
@@ -791,11 +1010,13 @@ export const generateWAMessageContent = async (
 		if (anyMsg.mentions !== undefined && anyMsg.mentions !== null && anyMsg.mentions) {
 			interactiveMessage.contextInfo = { ...interactiveMessage.contextInfo, mentionedJid: anyMsg.mentions }
 		}
-		m = { interactiveMessage }
+		m = prepareInteractiveMessage(interactiveMessage, {
+			viewOnce: (message as any).viewOnce !== false
+		})
 	}
 
 
-	if (hasOptionalProperty(message, 'viewOnce') && !!message.viewOnce) {
+	if (hasOptionalProperty(message, 'viewOnce') && !!message.viewOnce && !m.viewOnceMessage && !m.viewOnceMessageV2) {
 		m = { viewOnceMessage: { message: m } }
 	}
 
@@ -868,23 +1089,36 @@ export const generateWAMessageContent = async (
 	const isPrivChat = isPrivateChat(options.jid)
 	const isExplicitAi = typeof (message as any)?.ai !== 'undefined' ? (message as any).ai : options.ai
 	const isAiChatEnabled = options.aiChat !== false
+
+	const normMsg = normalizeMessageContent(m)
+	const isInteractive = Boolean(
+		normMsg?.interactiveMessage ||
+		normMsg?.buttonsMessage ||
+		normMsg?.listMessage ||
+		(m as any)?.viewOnceMessage?.message?.interactiveMessage ||
+		(m as any)?.viewOnceMessageV2?.message?.interactiveMessage
+	)
+
 	const shouldAddAi =
-		isExplicitAi !== undefined
+		!isInteractive &&
+		(isExplicitAi !== undefined
 			? Boolean(isExplicitAi)
-			: (isAiChatEnabled && isPrivChat)
+			: (isAiChatEnabled && isPrivChat))
 
 	if (shouldAddAi && isPrivChat) {
 		m.messageContextInfo = m.messageContextInfo || {}
 		m.messageContextInfo.supportPayload = BIZ_BOT_SUPPORT_PAYLOAD
 	}
 
-	injectAiBotInfo(m, {
-		jid: options.jid,
-		ai: typeof (message as any)?.ai !== 'undefined' ? (message as any).ai : options.ai,
-		aiChat: options.aiChat,
-		aiBotName: (message as any)?.aiBotName || options.aiBotName,
-		aiBotJid: (message as any)?.aiBotJid || options.aiBotJid
-	})
+	if (!isInteractive) {
+		injectAiBotInfo(m, {
+			jid: options.jid,
+			ai: typeof (message as any)?.ai !== 'undefined' ? (message as any).ai : options.ai,
+			aiChat: options.aiChat,
+			aiBotName: (message as any)?.aiBotName || options.aiBotName,
+			aiBotJid: (message as any)?.aiBotJid || options.aiBotJid
+		})
+	}
 
 	return WAProto.Message.create(m)
 }
