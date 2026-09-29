@@ -409,157 +409,6 @@ function hasOptionalProperty<T, K extends PropertyKey>(obj: T, key: K): obj is W
 	return typeof obj === 'object' && obj !== null && key in obj && (obj as any)[key] !== null
 }
 
-/**
- * Sanitizes and prepares an interactiveMessage (nativeFlow, payment buttons like review_and_pay, etc.)
- * into a clean structure that WhatsApp mobile (Android/iOS) and Web can render cleanly without
- * throwing circular reference errors or falling back to "unsupported version".
- * Removes serializer/smsg clutter, generates unique payment reference_id, and sets required Bloks botMetadata.
- */
-export const prepareInteractiveMessage = (
-	interactiveContent: any,
-	options: { defaultTextFallback?: string; viewOnce?: boolean } = {}
-): proto.IMessage => {
-	if (!interactiveContent || typeof interactiveContent !== 'object') {
-		return interactiveContent
-	}
-
-	let unwrappedContext: any = undefined
-	let targetInteractive: any = undefined
-	const isAlreadyViewOnce = Boolean(
-		interactiveContent.viewOnceMessage ||
-		interactiveContent.viewOnceMessageV2
-	)
-
-	if (interactiveContent.viewOnceMessage?.message?.interactiveMessage) {
-		unwrappedContext = interactiveContent.viewOnceMessage.message.messageContextInfo
-		targetInteractive = interactiveContent.viewOnceMessage.message.interactiveMessage
-	} else if (interactiveContent.viewOnceMessageV2?.message?.interactiveMessage) {
-		unwrappedContext = interactiveContent.viewOnceMessageV2.message.messageContextInfo
-		targetInteractive = interactiveContent.viewOnceMessageV2.message.interactiveMessage
-	} else if (interactiveContent.interactiveMessage) {
-		unwrappedContext = interactiveContent.messageContextInfo
-		targetInteractive = interactiveContent.interactiveMessage
-	} else {
-		targetInteractive = interactiveContent
-		unwrappedContext = interactiveContent.messageContextInfo
-	}
-
-	const clean = { ...targetInteractive }
-	const garbageKeys = [
-		'key',
-		'mtype',
-		'chat',
-		'id',
-		'from',
-		'isBaileys',
-		'sender',
-		'fromMe',
-		'text',
-		'mentionedJid',
-		'fakeObj',
-		'vM',
-		'isGroup',
-		'userReceipt',
-		'reactions',
-		'pollUpdates',
-		'eventResponses',
-		'statusMentions',
-		'messageAddOns',
-		'labels',
-		'messageStubParameters',
-		'statusMentionSources',
-		'supportAiCitations'
-	]
-	for (const k of garbageKeys) {
-		delete clean[k]
-	}
-
-	let hasPayment = false
-	if (clean.nativeFlowMessage?.buttons && Array.isArray(clean.nativeFlowMessage.buttons)) {
-		clean.nativeFlowMessage = {
-			...clean.nativeFlowMessage,
-			buttons: clean.nativeFlowMessage.buttons.map((btn: any) => {
-				const b = { ...btn }
-				if (b.name === 'review_and_pay' || b.name === 'review_order') {
-					hasPayment = true
-					if (b.buttonParamsJson) {
-						try {
-							const params =
-								typeof b.buttonParamsJson === 'string'
-									? JSON.parse(b.buttonParamsJson)
-									: { ...b.buttonParamsJson }
-
-							if (!params.reference_id || params.reference_id.startsWith('PAY-') || params.reference_id.startsWith('REF_')) {
-								params.reference_id = 'PAY_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7).toUpperCase()
-							}
-							b.buttonParamsJson = JSON.stringify(params)
-						} catch {}
-					}
-				}
-				return b
-			})
-		}
-	}
-
-	if (clean.header && typeof clean.header.hasMediaAttachment === 'undefined') {
-		clean.header = {
-			...clean.header,
-			hasMediaAttachment: Boolean(
-				clean.header.imageMessage ||
-				clean.header.videoMessage ||
-				clean.header.documentMessage
-			)
-		}
-	}
-
-	if (!clean.body || typeof clean.body.text !== 'string' || clean.body.text.trim() === '') {
-		clean.body = {
-			text: options.defaultTextFallback || clean.body?.text || ' '
-		}
-	}
-
-	const contextInfo: any = {
-		deviceListMetadata: {},
-		deviceListMetadataVersion: 2,
-		...(unwrappedContext && typeof unwrappedContext === 'object' ? unwrappedContext : {})
-	}
-
-	for (const k of garbageKeys) {
-		delete contextInfo[k]
-	}
-
-	if (Array.isArray(contextInfo.threadId) && contextInfo.threadId.length === 0) {
-		delete contextInfo.threadId
-	}
-
-	if (hasPayment) {
-		contextInfo.botMetadata = {
-			...(contextInfo.botMetadata || {}),
-			botRenderingConfigMetadata: {
-				bloksVersioningId: 'cf128c7f3bdf450a1610a750da8aab5061e9a85ad46d29a6ff2083e731c6e66c',
-				pixelDensity: 1.875
-			}
-		}
-	}
-
-	const shouldWrapViewOnce = options.viewOnce !== false
-	if (shouldWrapViewOnce) {
-		return {
-			viewOnceMessage: {
-				message: {
-					messageContextInfo: contextInfo,
-					interactiveMessage: clean
-				}
-			}
-		}
-	}
-
-	return {
-		messageContextInfo: contextInfo,
-		interactiveMessage: clean
-	}
-}
-
 export const generateWAMessageContent = async (
 	message: AnyMessageContent,
 	options: MessageContentGenerationOptions
@@ -945,17 +794,8 @@ export const generateWAMessageContent = async (
 		m = { interactiveMessage }
 	}
 
-	if ((anyMsg as any).interactive !== undefined && (anyMsg as any).interactive !== null) {
-		m = prepareInteractiveMessage((anyMsg as any).interactive, {
-			viewOnce: (message as any).viewOnce !== false
-		})
-	} else if ((anyMsg as any).interactiveMessage !== undefined && (anyMsg as any).interactiveMessage !== null) {
-		m = prepareInteractiveMessage((anyMsg as any).interactiveMessage, {
-			viewOnce: (message as any).viewOnce !== false
-		})
-	}
 
-	if (hasOptionalProperty(message, 'viewOnce') && !!message.viewOnce && !m.viewOnceMessage && !m.viewOnceMessageV2) {
+	if (hasOptionalProperty(message, 'viewOnce') && !!message.viewOnce) {
 		m = { viewOnceMessage: { message: m } }
 	}
 
@@ -1027,10 +867,13 @@ export const generateWAMessageContent = async (
 
 	const isPrivChat = isPrivateChat(options.jid)
 	const isExplicitAi = typeof (message as any)?.ai !== 'undefined' ? (message as any).ai : options.ai
-	const isAiChatEnabled = options.aiChat === true
-	const shouldAddAi = isExplicitAi === true && isAiChatEnabled && isPrivChat
+	const isAiChatEnabled = options.aiChat !== false
+	const shouldAddAi =
+		isExplicitAi !== undefined
+			? Boolean(isExplicitAi)
+			: (isAiChatEnabled && isPrivChat)
 
-	if (shouldAddAi) {
+	if (shouldAddAi && isPrivChat) {
 		m.messageContextInfo = m.messageContextInfo || {}
 		m.messageContextInfo.supportPayload = BIZ_BOT_SUPPORT_PAYLOAD
 	}
@@ -1077,7 +920,7 @@ export const injectAiBotInfo = (
 
 	const isPrivChat = isPrivateChat(options.jid)
 	const isExplicitAi = options.ai
-	const isAiChatEnabled = options.aiChat === true
+	const isAiChatEnabled = options.aiChat !== false
 	const shouldAddAi =
 		isExplicitAi !== undefined
 			? Boolean(isExplicitAi)

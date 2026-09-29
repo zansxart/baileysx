@@ -74,7 +74,6 @@ declare const makeWASocket: (config: UserFacingSocketConfig) => {
     issuePrivacyTokens: (jids: string[], timestamp?: number) => Promise<any>;
     assertSessions: (jids: string[], force?: boolean) => Promise<boolean>;
     relayMessage: (jid: string, message: import("../index.js").proto.IMessage, options: import("../index.js").MessageRelayOptions) => Promise<string>;
-    relayInteractiveMessage: (jid: string, interactive: any, options?: import("../index.js").MessageRelayOptions) => Promise<string>;
     sendReceipt: (jid: string, participant: string | undefined, messageIds: string[], type: import("../index.js").MessageReceiptType) => Promise<void>;
     sendReceipts: (keys: import("../index.js").WAMessageKey[], type: import("../index.js").MessageReceiptType) => Promise<void>;
     readMessages: (keys: import("../index.js").WAMessageKey[]) => Promise<void>;

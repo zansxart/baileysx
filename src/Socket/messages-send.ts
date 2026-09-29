@@ -38,7 +38,6 @@ import {
 	MessageRetryManager,
 	normalizeMessageContent,
 	parseAndInjectE2ESessions,
-	prepareInteractiveMessage,
 	unixTimestampSeconds
 } from '../Utils'
 import { getUrlInfo } from '../Utils/link-preview'
@@ -177,7 +176,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		messageIds: string[],
 		type: MessageReceiptType
 	) => {
-		if (isJidGroup(jid) && participant) {
+		const mappedJid = getLidForPn(jid)
+		if (mappedJid) {
+			jid = mappedJid
+		}
+		jid = jidToLid(jid)!
+		if (participant) {
 			const mappedParticipant = getLidForPn(participant)
 			if (mappedParticipant) {
 				participant = mappedParticipant
@@ -645,29 +649,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			ai
 		} = options
 
-		// Auto-sanitize and clean interactiveMessage if passed in raw/dirty form
-		if (message && typeof message === 'object') {
-			const hasInteractive =
-				'interactive' in message ||
-				'interactiveMessage' in message ||
-				Boolean((message as any).nativeFlowMessage) ||
-				Boolean((message as any).viewOnceMessage?.message?.interactiveMessage) ||
-				Boolean((message as any).viewOnceMessageV2?.message?.interactiveMessage) ||
-				Boolean((message as any).interactiveMessage?.key) ||
-				Boolean((message as any).interactiveMessage?.fakeObj)
-			if (hasInteractive) {
-				const isViewOnce = (options as any)?.viewOnce !== false
-				message = prepareInteractiveMessage(message, { viewOnce: isViewOnce })
-			}
-		}
-
 		const isPriv = isPrivateChat(jid)
-		const isAiExplicitlyEnabled = ai === true || (options as any)?.aiChat === true
-		if (!isAiExplicitlyEnabled && message?.messageContextInfo?.supportPayload) {
+		const isAiDisabled = ai === false || (options as any)?.aiChat === false || (config.aiChat === false && ai !== true)
+		if (isPriv && isAiDisabled && message?.messageContextInfo?.supportPayload) {
 			delete message.messageContextInfo.supportPayload
 		}
-		const isAiPayload = isAiExplicitlyEnabled && !!message?.messageContextInfo?.supportPayload?.includes('"is_ai_message":true')
-		if (isPriv && isAiExplicitlyEnabled && isAiPayload) {
+		const isAiPayload = !isAiDisabled && !!message?.messageContextInfo?.supportPayload?.includes('"is_ai_message":true')
+		if (isPriv && !isAiDisabled && (ai || isAiPayload)) {
 			additionalNodes = additionalNodes ? [...additionalNodes] : []
 			const hasBot = additionalNodes.some(n => n.tag === 'bot' && n.attrs?.biz_bot === '1')
 			if (!hasBot) {
@@ -680,7 +668,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 		}
 
-		if (isJidGroup(jid) && participant && participant.jid) {
+		const mappedJid = getLidForPn(jid)
+		if (mappedJid) {
+			jid = mappedJid
+		}
+		jid = jidToLid(jid)!
+		if (participant && participant.jid) {
 			const mappedParticipant = getLidForPn(participant.jid)
 			if (mappedParticipant) {
 				participant.jid = mappedParticipant
@@ -1067,95 +1060,52 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 
 			const normContent = normalizeMessageContent(message)
-			const interactiveMsg =
-				normContent?.interactiveMessage ||
-				message?.interactiveMessage ||
-				message?.viewOnceMessage?.message?.interactiveMessage ||
-				message?.viewOnceMessageV2?.message?.interactiveMessage ||
-				message?.viewOnceMessageV2Extension?.message?.interactiveMessage
-
-			const buttonsMsg =
-				normContent?.buttonsMessage ||
-				message?.buttonsMessage ||
-				message?.viewOnceMessage?.message?.buttonsMessage ||
-				message?.viewOnceMessageV2?.message?.buttonsMessage
-
-			const listMsg =
-				normContent?.listMessage ||
-				message?.listMessage ||
-				message?.viewOnceMessage?.message?.listMessage ||
-				message?.viewOnceMessageV2?.message?.listMessage
-
-			const isInteractive = Boolean(interactiveMsg || buttonsMsg || listMsg)
-
-			if ((isJidGroup(jid) || isPnUser(jid) || isLidUser(jid)) && isInteractive) {
-				const nativeFlow = interactiveMsg?.nativeFlowMessage
-				const firstButtonName = nativeFlow?.buttons?.[0]?.name
-				const nativeFlowSpecials = [
-					'mpm',
-					'cta_catalog',
-					'send_location',
-					'call_permission_request',
-					'wa_payment_transaction_details',
-					'automated_greeting_message_view_catalog'
-				]
-
-				let bizNode: BinaryNode | null = null
-
-				if (nativeFlow && (firstButtonName === 'review_and_pay' || firstButtonName === 'payment_info')) {
-					bizNode = {
-						tag: 'biz',
+			const contentType = getContentType(normContent)
+			if ((isJidGroup(jid) || isPnUser(jid) || isLidUser(jid)) && (
+				contentType === 'interactiveMessage' ||
+				contentType === 'buttonsMessage' ||
+				contentType === 'listMessage'
+			)) {
+				const bizNode: BinaryNode = { tag: 'biz', attrs: {} }
+				if (
+					normContent?.interactiveMessage ||
+					normContent?.buttonsMessage ||
+					message?.interactiveMessage ||
+					message?.buttonsMessage ||
+					message?.viewOnceMessage?.message?.interactiveMessage ||
+					message?.viewOnceMessage?.message?.buttonsMessage ||
+					message?.viewOnceMessageV2?.message?.interactiveMessage ||
+					message?.viewOnceMessageV2?.message?.buttonsMessage ||
+					message?.viewOnceMessageV2Extension?.message?.interactiveMessage ||
+					message?.viewOnceMessageV2Extension?.message?.buttonsMessage
+				) {
+					bizNode.content = [{
+						tag: 'interactive',
 						attrs: {
-							native_flow_name: firstButtonName === 'review_and_pay' ? 'order_details' : firstButtonName
+							type: 'native_flow',
+							v: '1'
+						},
+						content: [{
+							tag: 'native_flow',
+							attrs: { v: '9', name: 'mixed' }
+						}]
+					}]
+				} else if (
+					normContent?.listMessage ||
+					message?.listMessage ||
+					message?.viewOnceMessage?.message?.listMessage ||
+					message?.viewOnceMessageV2?.message?.listMessage ||
+					message?.viewOnceMessageV2Extension?.message?.listMessage
+				) {
+					bizNode.content = [{
+						tag: 'list',
+						attrs: {
+							type: 'product_list',
+							v: '2'
 						}
-					}
-				} else if (nativeFlow && firstButtonName && nativeFlowSpecials.includes(firstButtonName)) {
-					bizNode = {
-						tag: 'biz',
-						attrs: {},
-						content: [{
-							tag: 'interactive',
-							attrs: {
-								type: 'native_flow',
-								v: '1'
-							},
-							content: [{
-								tag: 'native_flow',
-								attrs: { v: '2', name: firstButtonName }
-							}]
-						}]
-					}
-				} else if (nativeFlow || buttonsMsg || interactiveMsg?.carouselMessage) {
-					bizNode = {
-						tag: 'biz',
-						attrs: {},
-						content: [{
-							tag: 'interactive',
-							attrs: {
-								type: 'native_flow',
-								v: '1'
-							},
-							content: [{
-								tag: 'native_flow',
-								attrs: { v: '9', name: 'mixed' }
-							}]
-						}]
-					}
-				} else if (listMsg) {
-					bizNode = {
-						tag: 'biz',
-						attrs: {},
-						content: [{
-							tag: 'list',
-							attrs: {
-								type: 'product_list',
-								v: '2'
-							}
-						}]
-					}
+					}]
 				}
-
-				if (bizNode) {
+				if (bizNode.content) {
 					;(stanza.content as BinaryNode[]).push(bizNode)
 				}
 			}
@@ -1547,15 +1497,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		issuePrivacyTokens,
 		assertSessions,
 		relayMessage,
-		relayInteractiveMessage: async (
-			jid: string,
-			interactive: any,
-			options: MessageRelayOptions = {}
-		) => {
-			const prepared = prepareInteractiveMessage(interactive)
-			const msgId = options.messageId || generateMessageIDV2(sock.user?.id)
-			return await relayMessage(jid, prepared, { ...options, messageId: msgId })
-		},
 		sendReceipt,
 		sendReceipts,
 		readMessages,
@@ -1690,26 +1631,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					messageId: msgId,
 					...options
 				})
-			} else if (
-				typeof content === 'object' &&
-				content !== null &&
-				('interactive' in content || 'interactiveMessage' in content)
-			) {
-				const rawInteractive = (content as any).interactive || (content as any).interactiveMessage
-				const prepared = prepareInteractiveMessage(rawInteractive, {
-					viewOnce: (content as any).viewOnce !== false
-				})
-				const msgId = options.messageId || generateMessageIDV2(sock.user?.id)
-				await relayMessage(jid, prepared, {
-					messageId: msgId,
-					useCachedGroupMetadata: options.useCachedGroupMetadata,
-					...options
-				})
-				return generateWAMessageFromContent(jid, prepared, {
-					userJid,
-					messageId: msgId,
-					...options
-				})
 			} else {
 				const fullMsg = await generateWAMessage(jid, content, {
 					logger,
@@ -1746,9 +1667,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				const isPrivChat = isPrivateChat(jid)
 				const isExplicitAi = (content as any)?.ai !== undefined ? (content as any).ai : (options as any)?.ai
-				const shouldAddAi = isExplicitAi === true && config.aiChat === true && isPrivChat
+				const isAiChatEnabled = config.aiChat !== false
+				const shouldAddAi =
+					isExplicitAi !== undefined
+						? Boolean(isExplicitAi)
+						: (isAiChatEnabled && isPrivChat)
 
-				if (shouldAddAi) {
+				if (shouldAddAi && isPrivChat) {
 					fullMsg.message!.messageContextInfo = fullMsg.message!.messageContextInfo || {}
 					fullMsg.message!.messageContextInfo.supportPayload = BIZ_BOT_SUPPORT_PAYLOAD
 					const hasBot = additionalNodes.some(n => n.tag === 'bot' && n.attrs?.biz_bot === '1')

@@ -311,12 +311,6 @@ export type AnyRegularMessageContent = (
 			shop?: any
 			id?: string
 	  }
-	| {
-			interactive?: any
-	  }
-	| {
-			interactiveMessage?: any
-	  }
 ) &
 	ViewOnce
 
