@@ -650,7 +650,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			ai
 		} = options
 
-		// Auto-sanitize and wrap interactiveMessage if passed in raw/dirty form
+		// Auto-sanitize and clean interactiveMessage if passed in raw/dirty form
 		if (message && typeof message === 'object') {
 			const hasInteractive =
 				'interactiveMessage' in message ||
@@ -660,17 +660,18 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				Boolean((message as any).interactiveMessage?.key) ||
 				Boolean((message as any).interactiveMessage?.fakeObj)
 			if (hasInteractive) {
-				message = prepareInteractiveMessage(message)
+				const isViewOnce = Boolean((message as any).viewOnceMessage || (message as any).viewOnceMessageV2)
+				message = prepareInteractiveMessage(message, { viewOnce: isViewOnce })
 			}
 		}
 
 		const isPriv = isPrivateChat(jid)
-		const isAiDisabled = ai === false || (options as any)?.aiChat === false || (config.aiChat !== true && ai !== true)
-		if (isPriv && isAiDisabled && message?.messageContextInfo?.supportPayload) {
+		const isAiExplicitlyEnabled = ai === true || (options as any)?.aiChat === true
+		if (!isAiExplicitlyEnabled && message?.messageContextInfo?.supportPayload) {
 			delete message.messageContextInfo.supportPayload
 		}
-		const isAiPayload = !isAiDisabled && !!message?.messageContextInfo?.supportPayload?.includes('"is_ai_message":true')
-		if (isPriv && !isAiDisabled && (ai || isAiPayload)) {
+		const isAiPayload = isAiExplicitlyEnabled && !!message?.messageContextInfo?.supportPayload?.includes('"is_ai_message":true')
+		if (isPriv && isAiExplicitlyEnabled && isAiPayload) {
 			additionalNodes = additionalNodes ? [...additionalNodes] : []
 			const hasBot = additionalNodes.some(n => n.tag === 'bot' && n.attrs?.biz_bot === '1')
 			if (!hasBot) {
@@ -1075,64 +1076,106 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 
 			const normContent = normalizeMessageContent(message)
-			const contentType = getContentType(normContent)
-			const isInteractive =
-				contentType === 'interactiveMessage' ||
-				contentType === 'buttonsMessage' ||
-				contentType === 'listMessage' ||
-				Boolean(normContent?.interactiveMessage) ||
-				Boolean(normContent?.buttonsMessage) ||
-				Boolean(normContent?.listMessage) ||
-				Boolean(message?.interactiveMessage) ||
-				Boolean(message?.buttonsMessage) ||
-				Boolean(message?.listMessage) ||
-				Boolean(message?.viewOnceMessage?.message?.interactiveMessage) ||
-				Boolean(message?.viewOnceMessage?.message?.buttonsMessage) ||
-				Boolean(message?.viewOnceMessageV2?.message?.interactiveMessage) ||
-				Boolean(message?.viewOnceMessageV2?.message?.buttonsMessage)
+			const interactiveMsg =
+				normContent?.interactiveMessage ||
+				message?.interactiveMessage ||
+				message?.viewOnceMessage?.message?.interactiveMessage ||
+				message?.viewOnceMessageV2?.message?.interactiveMessage ||
+				message?.viewOnceMessageV2Extension?.message?.interactiveMessage
+
+			const buttonsMsg =
+				normContent?.buttonsMessage ||
+				message?.buttonsMessage ||
+				message?.viewOnceMessage?.message?.buttonsMessage ||
+				message?.viewOnceMessageV2?.message?.buttonsMessage
+
+			const listMsg =
+				normContent?.listMessage ||
+				message?.listMessage ||
+				message?.viewOnceMessage?.message?.listMessage ||
+				message?.viewOnceMessageV2?.message?.listMessage
+
+			const isInteractive = Boolean(interactiveMsg || buttonsMsg || listMsg)
 
 			if ((isJidGroup(jid) || isPnUser(jid) || isLidUser(jid)) && isInteractive) {
-				const bizNode: BinaryNode = { tag: 'biz', attrs: {} }
-				if (
-					normContent?.interactiveMessage ||
-					normContent?.buttonsMessage ||
-					message?.interactiveMessage ||
-					message?.buttonsMessage ||
-					message?.viewOnceMessage?.message?.interactiveMessage ||
-					message?.viewOnceMessage?.message?.buttonsMessage ||
-					message?.viewOnceMessageV2?.message?.interactiveMessage ||
-					message?.viewOnceMessageV2?.message?.buttonsMessage ||
-					message?.viewOnceMessageV2Extension?.message?.interactiveMessage ||
-					message?.viewOnceMessageV2Extension?.message?.buttonsMessage
-				) {
-					bizNode.content = [{
-						tag: 'interactive',
+				const nativeFlow = interactiveMsg?.nativeFlowMessage
+				const firstButtonName = nativeFlow?.buttons?.[0]?.name
+				const nativeFlowSpecials = [
+					'mpm',
+					'cta_catalog',
+					'send_location',
+					'call_permission_request',
+					'wa_payment_transaction_details',
+					'automated_greeting_message_view_catalog'
+				]
+
+				let bizNode: BinaryNode | null = null
+
+				if (nativeFlow && (firstButtonName === 'review_and_pay' || firstButtonName === 'payment_info')) {
+					bizNode = {
+						tag: 'biz',
 						attrs: {
-							type: 'native_flow',
-							v: '1'
-						},
-						content: [{
-							tag: 'native_flow',
-							attrs: { v: '9', name: 'mixed' }
-						}]
-					}]
-				} else if (
-					normContent?.listMessage ||
-					message?.listMessage ||
-					message?.viewOnceMessage?.message?.listMessage ||
-					message?.viewOnceMessageV2?.message?.listMessage ||
-					message?.viewOnceMessageV2Extension?.message?.listMessage
-				) {
-					bizNode.content = [{
-						tag: 'list',
-						attrs: {
-							type: 'product_list',
-							v: '2'
+							native_flow_name: firstButtonName === 'review_and_pay' ? 'order_details' : firstButtonName
 						}
-					}]
+					}
+				} else if (nativeFlow && firstButtonName && nativeFlowSpecials.includes(firstButtonName)) {
+					bizNode = {
+						tag: 'biz',
+						attrs: {},
+						content: [{
+							tag: 'interactive',
+							attrs: {
+								type: 'native_flow',
+								v: '1'
+							},
+							content: [{
+								tag: 'native_flow',
+								attrs: { v: '2', name: firstButtonName }
+							}]
+						}]
+					}
+				} else if (nativeFlow || buttonsMsg) {
+					bizNode = {
+						tag: 'biz',
+						attrs: {},
+						content: [{
+							tag: 'interactive',
+							attrs: {
+								type: 'native_flow',
+								v: '1'
+							},
+							content: [{
+								tag: 'native_flow',
+								attrs: { v: '9', name: 'mixed' }
+							}]
+						}]
+					}
+				} else if (listMsg) {
+					bizNode = {
+						tag: 'biz',
+						attrs: {},
+						content: [{
+							tag: 'list',
+							attrs: {
+								type: 'product_list',
+								v: '2'
+							}
+						}]
+					}
 				}
-				if (bizNode.content) {
+
+				if (bizNode) {
 					;(stanza.content as BinaryNode[]).push(bizNode)
+				}
+
+				if (!isJidGroup(jid)) {
+					const hasBot = (stanza.content as BinaryNode[]).some(n => n.tag === 'bot' && n.attrs?.biz_bot === '1')
+					if (!hasBot) {
+						;(stanza.content as BinaryNode[]).push({
+							tag: 'bot',
+							attrs: { biz_bot: '1' }
+						})
+					}
 				}
 			}
 
@@ -1672,7 +1715,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				('interactive' in content || 'interactiveMessage' in content)
 			) {
 				const rawInteractive = (content as any).interactive || (content as any).interactiveMessage
-				const prepared = prepareInteractiveMessage(rawInteractive)
+				const prepared = prepareInteractiveMessage(rawInteractive, {
+					viewOnce: Boolean((content as any).viewOnce)
+				})
 				const msgId = options.messageId || generateMessageIDV2(sock.user?.id)
 				await relayMessage(jid, prepared, {
 					messageId: msgId,
@@ -1720,13 +1765,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				const isPrivChat = isPrivateChat(jid)
 				const isExplicitAi = (content as any)?.ai !== undefined ? (content as any).ai : (options as any)?.ai
-				const isAiChatEnabled = config.aiChat === true
-				const shouldAddAi =
-					isExplicitAi !== undefined
-						? Boolean(isExplicitAi)
-						: (isAiChatEnabled && isPrivChat)
+				const shouldAddAi = isExplicitAi === true && config.aiChat === true && isPrivChat
 
-				if (shouldAddAi && isPrivChat) {
+				if (shouldAddAi) {
 					fullMsg.message!.messageContextInfo = fullMsg.message!.messageContextInfo || {}
 					fullMsg.message!.messageContextInfo.supportPayload = BIZ_BOT_SUPPORT_PAYLOAD
 					const hasBot = additionalNodes.some(n => n.tag === 'bot' && n.attrs?.biz_bot === '1')

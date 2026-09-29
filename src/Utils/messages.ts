@@ -411,12 +411,13 @@ function hasOptionalProperty<T, K extends PropertyKey>(obj: T, key: K): obj is W
 
 /**
  * Sanitizes and prepares an interactiveMessage (nativeFlow, payment buttons like review_and_pay, etc.)
- * into a valid viewOnceMessage structure that WhatsApp mobile (Android/iOS) and Web can render cleanly.
+ * into a clean structure that WhatsApp mobile (Android/iOS) and Web can render cleanly without
+ * throwing circular reference errors or falling back to "unsupported version".
  * Removes serializer/smsg clutter, generates unique payment reference_id, and sets required Bloks botMetadata.
  */
 export const prepareInteractiveMessage = (
 	interactiveContent: any,
-	options: { defaultTextFallback?: string } = {}
+	options: { defaultTextFallback?: string; viewOnce?: boolean } = {}
 ): proto.IMessage => {
 	if (!interactiveContent || typeof interactiveContent !== 'object') {
 		return interactiveContent
@@ -424,6 +425,10 @@ export const prepareInteractiveMessage = (
 
 	let unwrappedContext: any = undefined
 	let targetInteractive: any = undefined
+	const isAlreadyViewOnce = Boolean(
+		interactiveContent.viewOnceMessage ||
+		interactiveContent.viewOnceMessageV2
+	)
 
 	if (interactiveContent.viewOnceMessage?.message?.interactiveMessage) {
 		unwrappedContext = interactiveContent.viewOnceMessage.message.messageContextInfo
@@ -533,13 +538,21 @@ export const prepareInteractiveMessage = (
 		}
 	}
 
-	return {
-		viewOnceMessage: {
-			message: {
-				messageContextInfo: contextInfo,
-				interactiveMessage: clean
+	const shouldWrapViewOnce = options.viewOnce === true || (isAlreadyViewOnce && options.viewOnce !== false)
+	if (shouldWrapViewOnce) {
+		return {
+			viewOnceMessage: {
+				message: {
+					messageContextInfo: contextInfo,
+					interactiveMessage: clean
+				}
 			}
 		}
+	}
+
+	return {
+		messageContextInfo: contextInfo,
+		interactiveMessage: clean
 	}
 }
 
@@ -929,12 +942,16 @@ export const generateWAMessageContent = async (
 	}
 
 	if ((anyMsg as any).interactive !== undefined && (anyMsg as any).interactive !== null) {
-		m = prepareInteractiveMessage((anyMsg as any).interactive)
+		m = prepareInteractiveMessage((anyMsg as any).interactive, {
+			viewOnce: Boolean((message as any).viewOnce)
+		})
 	} else if ((anyMsg as any).interactiveMessage !== undefined && (anyMsg as any).interactiveMessage !== null) {
-		m = prepareInteractiveMessage((anyMsg as any).interactiveMessage)
+		m = prepareInteractiveMessage((anyMsg as any).interactiveMessage, {
+			viewOnce: Boolean((message as any).viewOnce)
+		})
 	}
 
-	if (hasOptionalProperty(message, 'viewOnce') && !!message.viewOnce) {
+	if (hasOptionalProperty(message, 'viewOnce') && !!message.viewOnce && !m.viewOnceMessage && !m.viewOnceMessageV2) {
 		m = { viewOnceMessage: { message: m } }
 	}
 
@@ -1007,12 +1024,9 @@ export const generateWAMessageContent = async (
 	const isPrivChat = isPrivateChat(options.jid)
 	const isExplicitAi = typeof (message as any)?.ai !== 'undefined' ? (message as any).ai : options.ai
 	const isAiChatEnabled = options.aiChat === true
-	const shouldAddAi =
-		isExplicitAi !== undefined
-			? Boolean(isExplicitAi)
-			: (isAiChatEnabled && isPrivChat)
+	const shouldAddAi = isExplicitAi === true && isAiChatEnabled && isPrivChat
 
-	if (shouldAddAi && isPrivChat) {
+	if (shouldAddAi) {
 		m.messageContextInfo = m.messageContextInfo || {}
 		m.messageContextInfo.supportPayload = BIZ_BOT_SUPPORT_PAYLOAD
 	}
