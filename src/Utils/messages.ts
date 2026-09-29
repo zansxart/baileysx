@@ -524,6 +524,10 @@ export const prepareInteractiveMessage = (
 		...(unwrappedContext && typeof unwrappedContext === 'object' ? unwrappedContext : {})
 	}
 
+	for (const k of garbageKeys) {
+		delete contextInfo[k]
+	}
+
 	if (Array.isArray(contextInfo.threadId) && contextInfo.threadId.length === 0) {
 		delete contextInfo.threadId
 	}
@@ -538,7 +542,7 @@ export const prepareInteractiveMessage = (
 		}
 	}
 
-	const shouldWrapViewOnce = options.viewOnce === true || (isAlreadyViewOnce && options.viewOnce !== false)
+	const shouldWrapViewOnce = options.viewOnce !== false
 	if (shouldWrapViewOnce) {
 		return {
 			viewOnceMessage: {
@@ -943,11 +947,11 @@ export const generateWAMessageContent = async (
 
 	if ((anyMsg as any).interactive !== undefined && (anyMsg as any).interactive !== null) {
 		m = prepareInteractiveMessage((anyMsg as any).interactive, {
-			viewOnce: Boolean((message as any).viewOnce)
+			viewOnce: (message as any).viewOnce !== false
 		})
 	} else if ((anyMsg as any).interactiveMessage !== undefined && (anyMsg as any).interactiveMessage !== null) {
 		m = prepareInteractiveMessage((anyMsg as any).interactiveMessage, {
-			viewOnce: Boolean((message as any).viewOnce)
+			viewOnce: (message as any).viewOnce !== false
 		})
 	}
 

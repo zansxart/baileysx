@@ -177,12 +177,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		messageIds: string[],
 		type: MessageReceiptType
 	) => {
-		const mappedJid = getLidForPn(jid)
-		if (mappedJid) {
-			jid = mappedJid
-		}
-		jid = jidToLid(jid)!
-		if (participant) {
+		if (isJidGroup(jid) && participant) {
 			const mappedParticipant = getLidForPn(participant)
 			if (mappedParticipant) {
 				participant = mappedParticipant
@@ -653,14 +648,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		// Auto-sanitize and clean interactiveMessage if passed in raw/dirty form
 		if (message && typeof message === 'object') {
 			const hasInteractive =
+				'interactive' in message ||
 				'interactiveMessage' in message ||
-				(message as any).nativeFlowMessage ||
-				Boolean((message as any).viewOnceMessage?.message?.interactiveMessage?.fakeObj) ||
-				Boolean((message as any).viewOnceMessage?.message?.interactiveMessage?.key) ||
+				Boolean((message as any).nativeFlowMessage) ||
+				Boolean((message as any).viewOnceMessage?.message?.interactiveMessage) ||
+				Boolean((message as any).viewOnceMessageV2?.message?.interactiveMessage) ||
 				Boolean((message as any).interactiveMessage?.key) ||
 				Boolean((message as any).interactiveMessage?.fakeObj)
 			if (hasInteractive) {
-				const isViewOnce = Boolean((message as any).viewOnceMessage || (message as any).viewOnceMessageV2)
+				const isViewOnce = (options as any)?.viewOnce !== false
 				message = prepareInteractiveMessage(message, { viewOnce: isViewOnce })
 			}
 		}
@@ -684,12 +680,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 		}
 
-		const mappedJid = getLidForPn(jid)
-		if (mappedJid) {
-			jid = mappedJid
-		}
-		jid = jidToLid(jid)!
-		if (participant && participant.jid) {
+		if (isJidGroup(jid) && participant && participant.jid) {
 			const mappedParticipant = getLidForPn(participant.jid)
 			if (mappedParticipant) {
 				participant.jid = mappedParticipant
@@ -1134,7 +1125,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							}]
 						}]
 					}
-				} else if (nativeFlow || buttonsMsg) {
+				} else if (nativeFlow || buttonsMsg || interactiveMsg?.carouselMessage) {
 					bizNode = {
 						tag: 'biz',
 						attrs: {},
@@ -1166,16 +1157,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				if (bizNode) {
 					;(stanza.content as BinaryNode[]).push(bizNode)
-				}
-
-				if (!isJidGroup(jid)) {
-					const hasBot = (stanza.content as BinaryNode[]).some(n => n.tag === 'bot' && n.attrs?.biz_bot === '1')
-					if (!hasBot) {
-						;(stanza.content as BinaryNode[]).push({
-							tag: 'bot',
-							attrs: { biz_bot: '1' }
-						})
-					}
 				}
 			}
 
@@ -1716,7 +1697,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			) {
 				const rawInteractive = (content as any).interactive || (content as any).interactiveMessage
 				const prepared = prepareInteractiveMessage(rawInteractive, {
-					viewOnce: Boolean((content as any).viewOnce)
+					viewOnce: (content as any).viewOnce !== false
 				})
 				const msgId = options.messageId || generateMessageIDV2(sock.user?.id)
 				await relayMessage(jid, prepared, {
