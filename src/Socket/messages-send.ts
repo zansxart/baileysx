@@ -737,7 +737,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		}
 
 		await authState.keys.transaction(async () => {
-			const mediaType = getMediaType(message)
+			const isGroupStatusAudio = Boolean(
+				message?.groupStatusMessageV2?.message?.audioMessage ||
+				(message as any)?.groupStatusMessage?.message?.audioMessage
+			)
+			const mediaType = isGroupStatusAudio ? undefined : getMediaType(message)
 			if (mediaType) {
 				extraAttrs['mediatype'] = mediaType
 			}
@@ -1300,7 +1304,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			return 'event'
 		}
 
-		if (getMediaType(normalizedMessage) !== '') {
+		const isGroupStatusAudio = Boolean(
+			message?.groupStatusMessageV2?.message?.audioMessage ||
+			(message as any)?.groupStatusMessage?.message?.audioMessage
+		)
+
+		if (!isGroupStatusAudio && getMediaType(normalizedMessage) !== '') {
 			return 'media'
 		}
 
@@ -1311,33 +1320,33 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const msg = normalizeMessageContent(message) || message
 		if (msg.imageMessage) {
 			return 'image'
-		} else if (message.videoMessage) {
-			return message.videoMessage.gifPlayback ? 'gif' : 'video'
-		} else if (message.audioMessage) {
-			return message.audioMessage.ptt ? 'ptt' : 'audio'
-		} else if (message.contactMessage) {
+		} else if (msg.videoMessage) {
+			return msg.videoMessage.gifPlayback ? 'gif' : 'video'
+		} else if (msg.audioMessage) {
+			return msg.audioMessage.ptt ? 'ptt' : 'audio'
+		} else if (msg.contactMessage) {
 			return 'vcard'
-		} else if (message.documentMessage) {
+		} else if (msg.documentMessage) {
 			return 'document'
-		} else if (message.contactsArrayMessage) {
+		} else if (msg.contactsArrayMessage) {
 			return 'contact_array'
-		} else if (message.liveLocationMessage) {
+		} else if (msg.liveLocationMessage) {
 			return 'livelocation'
-		} else if (message.stickerMessage) {
+		} else if (msg.stickerMessage) {
 			return 'sticker'
-		} else if (message.listMessage) {
+		} else if (msg.listMessage) {
 			return 'list'
-		} else if (message.listResponseMessage) {
+		} else if (msg.listResponseMessage) {
 			return 'list_response'
-		} else if (message.buttonsResponseMessage) {
+		} else if (msg.buttonsResponseMessage) {
 			return 'buttons_response'
-		} else if (message.orderMessage) {
+		} else if (msg.orderMessage) {
 			return 'order'
-		} else if (message.productMessage) {
+		} else if (msg.productMessage) {
 			return 'product'
-		} else if (message.interactiveResponseMessage) {
+		} else if (msg.interactiveResponseMessage) {
 			return 'native_flow_response'
-		} else if (message.groupInviteMessage) {
+		} else if (msg.groupInviteMessage) {
 			return 'url'
 		}
 
@@ -1622,8 +1631,18 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							: 0
 						: disappearingMessagesInChat
 				await groupToggleEphemeral(jid, value)
-			} else if (typeof content === 'object' && 'groupStatusMessage' in content && content.groupStatusMessage) {
-				const storyData = content.groupStatusMessage
+			} else if (
+				(typeof content === 'object' && content !== null && ('groupStatusMessage' in content || (content as any)?.groupStatus)) ||
+				options?.groupStatus
+			) {
+				const storyData =
+					(content as any).groupStatusMessage ||
+					(typeof content === 'object' ? { ...content } : content)
+
+				if (typeof storyData === 'object' && storyData !== null && 'groupStatus' in storyData) {
+					delete (storyData as any).groupStatus
+				}
+
 				let waMsgContent: any
 
 				if (storyData.message) {
@@ -1636,11 +1655,37 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					})
 				}
 
-				const innerMsg = waMsgContent.message || waMsgContent
+				const innerMsg: any = { ...(waMsgContent.message || waMsgContent) }
+
+				// Inject isGroupStatus: true into contextInfo for any inner message type (image, video, audio, text)
+				const mediaKey = Object.keys(innerMsg).find(
+					k => k.endsWith('Message') && k !== 'messageContextInfo'
+				)
+
+				if (mediaKey && innerMsg[mediaKey]) {
+					innerMsg[mediaKey] = {
+						...innerMsg[mediaKey],
+						contextInfo: {
+							...(innerMsg[mediaKey]?.contextInfo || {}),
+							isGroupStatus: true
+						}
+					}
+				}
+
+				const messageSecret =
+					innerMsg.messageContextInfo?.messageSecret ||
+					waMsgContent.messageContextInfo?.messageSecret ||
+					randomBytes(32)
+
+				innerMsg.messageContextInfo = {
+					...(innerMsg.messageContextInfo || {}),
+					messageSecret
+				}
+
 				const msg = {
 					message: {
-						groupStatusMessage: {
-							message: innerMsg
+						messageContextInfo: {
+							messageSecret
 						},
 						groupStatusMessageV2: {
 							message: innerMsg

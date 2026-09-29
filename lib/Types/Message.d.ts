@@ -243,7 +243,8 @@ export type AnyMessageContent = (AnyRegularMessageContent | {
 } | {
     limitSharing: boolean;
 } | {
-    groupStatusMessage: any;
+    groupStatusMessage?: any;
+    groupStatus?: boolean;
 }) & {
     mentionAll?: boolean;
     /** Toggle Meta AI badge on sent message. Pass true, false, or custom bot name */
@@ -292,6 +293,8 @@ export type MiscMessageGenerationOptions = MinimalRelayOptions & {
     mediaUploadTimeoutMs?: number;
     /** jid list of participants for status@broadcast */
     statusJidList?: string[];
+    /** whether to send message as a group story/status */
+    groupStatus?: boolean;
     /** backgroundcolor for status */
     backgroundColor?: string;
     /** font type for status */

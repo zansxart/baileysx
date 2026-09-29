@@ -337,7 +337,8 @@ export type AnyMessageContent = (
 			limitSharing: boolean
 	  }
 	| {
-			groupStatusMessage: any
+			groupStatusMessage?: any
+			groupStatus?: boolean
 	  }
 ) & {
 	mentionAll?: boolean
@@ -387,6 +388,8 @@ export type MiscMessageGenerationOptions = MinimalRelayOptions & {
 	mediaUploadTimeoutMs?: number
 	/** jid list of participants for status@broadcast */
 	statusJidList?: string[]
+	/** whether to send message as a group story/status */
+	groupStatus?: boolean
 	/** backgroundcolor for status */
 	backgroundColor?: string
 	/** font type for status */
