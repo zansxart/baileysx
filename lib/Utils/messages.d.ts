@@ -20,6 +20,14 @@ export declare const prepareDisappearingMessageSettingContent: (ephemeralExpirat
  */
 export declare const generateForwardMessageContent: (message: WAMessage, forceForward?: boolean) => proto.IMessage;
 export declare const hasNonNullishProperty: <K extends PropertyKey>(message: AnyMessageContent, key: K) => message is ExtractByKey<AnyMessageContent, K>;
+/**
+ * Sanitizes and prepares an interactiveMessage (nativeFlow, payment buttons like review_and_pay, etc.)
+ * into a valid viewOnceMessage structure that WhatsApp mobile (Android/iOS) and Web can render cleanly.
+ * Removes serializer/smsg clutter, generates unique payment reference_id, and sets required Bloks botMetadata.
+ */
+export declare const prepareInteractiveMessage: (interactiveContent: any, options?: {
+    defaultTextFallback?: string;
+}) => proto.IMessage;
 export declare const generateWAMessageContent: (message: AnyMessageContent, options: MessageContentGenerationOptions) => Promise<proto.IMessage>;
 /** Check if a jid is a 1-on-1 private chat (not a group, newsletter, or broadcast) */
 export declare const isPrivateChat: (jid?: string) => boolean;

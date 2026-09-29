@@ -38,6 +38,7 @@ import {
 	MessageRetryManager,
 	normalizeMessageContent,
 	parseAndInjectE2ESessions,
+	prepareInteractiveMessage,
 	unixTimestampSeconds
 } from '../Utils'
 import { getUrlInfo } from '../Utils/link-preview'
@@ -649,8 +650,22 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			ai
 		} = options
 
+		// Auto-sanitize and wrap interactiveMessage if passed in raw/dirty form
+		if (message && typeof message === 'object') {
+			const hasInteractive =
+				'interactiveMessage' in message ||
+				(message as any).nativeFlowMessage ||
+				Boolean((message as any).viewOnceMessage?.message?.interactiveMessage?.fakeObj) ||
+				Boolean((message as any).viewOnceMessage?.message?.interactiveMessage?.key) ||
+				Boolean((message as any).interactiveMessage?.key) ||
+				Boolean((message as any).interactiveMessage?.fakeObj)
+			if (hasInteractive) {
+				message = prepareInteractiveMessage(message)
+			}
+		}
+
 		const isPriv = isPrivateChat(jid)
-		const isAiDisabled = ai === false || (options as any)?.aiChat === false || (config.aiChat === false && ai !== true)
+		const isAiDisabled = ai === false || (options as any)?.aiChat === false || (config.aiChat !== true && ai !== true)
 		if (isPriv && isAiDisabled && message?.messageContextInfo?.supportPayload) {
 			delete message.messageContextInfo.supportPayload
 		}
@@ -1061,11 +1076,22 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 			const normContent = normalizeMessageContent(message)
 			const contentType = getContentType(normContent)
-			if ((isJidGroup(jid) || isPnUser(jid) || isLidUser(jid)) && (
+			const isInteractive =
 				contentType === 'interactiveMessage' ||
 				contentType === 'buttonsMessage' ||
-				contentType === 'listMessage'
-			)) {
+				contentType === 'listMessage' ||
+				Boolean(normContent?.interactiveMessage) ||
+				Boolean(normContent?.buttonsMessage) ||
+				Boolean(normContent?.listMessage) ||
+				Boolean(message?.interactiveMessage) ||
+				Boolean(message?.buttonsMessage) ||
+				Boolean(message?.listMessage) ||
+				Boolean(message?.viewOnceMessage?.message?.interactiveMessage) ||
+				Boolean(message?.viewOnceMessage?.message?.buttonsMessage) ||
+				Boolean(message?.viewOnceMessageV2?.message?.interactiveMessage) ||
+				Boolean(message?.viewOnceMessageV2?.message?.buttonsMessage)
+
+			if ((isJidGroup(jid) || isPnUser(jid) || isLidUser(jid)) && isInteractive) {
 				const bizNode: BinaryNode = { tag: 'biz', attrs: {} }
 				if (
 					normContent?.interactiveMessage ||
@@ -1497,6 +1523,15 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		issuePrivacyTokens,
 		assertSessions,
 		relayMessage,
+		relayInteractiveMessage: async (
+			jid: string,
+			interactive: any,
+			options: MessageRelayOptions = {}
+		) => {
+			const prepared = prepareInteractiveMessage(interactive)
+			const msgId = options.messageId || generateMessageIDV2(sock.user?.id)
+			return await relayMessage(jid, prepared, { ...options, messageId: msgId })
+		},
 		sendReceipt,
 		sendReceipts,
 		readMessages,
@@ -1631,6 +1666,24 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					messageId: msgId,
 					...options
 				})
+			} else if (
+				typeof content === 'object' &&
+				content !== null &&
+				('interactive' in content || 'interactiveMessage' in content)
+			) {
+				const rawInteractive = (content as any).interactive || (content as any).interactiveMessage
+				const prepared = prepareInteractiveMessage(rawInteractive)
+				const msgId = options.messageId || generateMessageIDV2(sock.user?.id)
+				await relayMessage(jid, prepared, {
+					messageId: msgId,
+					useCachedGroupMetadata: options.useCachedGroupMetadata,
+					...options
+				})
+				return generateWAMessageFromContent(jid, prepared, {
+					userJid,
+					messageId: msgId,
+					...options
+				})
 			} else {
 				const fullMsg = await generateWAMessage(jid, content, {
 					logger,
@@ -1667,7 +1720,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				const isPrivChat = isPrivateChat(jid)
 				const isExplicitAi = (content as any)?.ai !== undefined ? (content as any).ai : (options as any)?.ai
-				const isAiChatEnabled = config.aiChat !== false
+				const isAiChatEnabled = config.aiChat === true
 				const shouldAddAi =
 					isExplicitAi !== undefined
 						? Boolean(isExplicitAi)
