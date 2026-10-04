@@ -1651,7 +1651,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				} else {
 					// Raw media content (image/video/text) — generate WAMessage content
 					waMsgContent = await generateWAMessageContent(storyData, {
-						upload: waUploadToServer
+						upload: waUploadToServer,
+						...options
 					})
 				}
 
