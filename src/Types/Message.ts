@@ -338,6 +338,7 @@ export type AnyMessageContent = (
 	  }
 	| {
 			groupStatusMessage?: any
+			groupStatusMessageV2?: any
 			groupStatus?: boolean
 	  }
 ) & {

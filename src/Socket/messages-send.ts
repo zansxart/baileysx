@@ -828,7 +828,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				const bytes = encodeWAMessage(patched)
 				reportingMessage = patched
-				const groupAddressingMode = additionalAttributes?.['addressing_mode'] || groupData?.addressingMode || 'lid'
+				const groupAddressingMode = isStatus ? 'pn' : (additionalAttributes?.['addressing_mode'] || groupData?.addressingMode || 'lid')
 				const groupSenderIdentity = groupAddressingMode === 'lid' && meLid ? meLid : meId
 
 				const { ciphertext, senderKeyDistributionMessage } = await signalRepository.encryptGroupMessage({
@@ -845,7 +845,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						(!hasKey || !!participant) &&
 						!isHostedLidUser(deviceJid) &&
 						!isHostedPnUser(deviceJid) &&
-						device.device !== 99
+						device.device !== 99 &&
+						deviceJid !== meId &&
+						(!meLid || deviceJid !== meLid)
 					) {
 						//todo: revamp all this logic
 						// the goal is to follow with what I said above for each group, and instead of a true false map of ids, we can set an array full of those the app has already sent pkmsgs
@@ -994,7 +996,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				let messageToSend = message
 				if (isGroupOrStatus) {
 					let groupSenderIdentity: string | undefined
-					if (meLid && (await signalRepository.hasSenderKey({ group: destinationJid, meId: meLid }))) {
+					if (!isStatus && meLid && (await signalRepository.hasSenderKey({ group: destinationJid, meId: meLid }))) {
 						groupSenderIdentity = meLid
 					} else if (await signalRepository.hasSenderKey({ group: destinationJid, meId })) {
 						groupSenderIdentity = meId
@@ -1164,6 +1166,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 			if (
 				!isNewsletter &&
+				!isStatus &&
 				!isRetryResend &&
 				reportingMessage?.messageContextInfo?.messageSecret &&
 				shouldIncludeReportingToken(reportingMessage)
@@ -1673,20 +1676,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 				}
 
-				const messageSecret =
-					innerMsg.messageContextInfo?.messageSecret ||
-					waMsgContent.messageContextInfo?.messageSecret ||
-					randomBytes(32)
-
-				innerMsg.messageContextInfo = {
-					...(innerMsg.messageContextInfo || {}),
-					messageSecret
-				}
-
 				const msg = {
 					message: {
-						messageContextInfo: {
-							messageSecret
+						groupStatusMessage: {
+							message: innerMsg
 						},
 						groupStatusMessageV2: {
 							message: innerMsg

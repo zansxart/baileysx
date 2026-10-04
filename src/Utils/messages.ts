@@ -234,7 +234,7 @@ export const prepareWAMessageMedia = async (
 		(mediaType === 'image' || mediaType === 'video') && typeof uploadData['jpegThumbnail'] === 'undefined'
 	const requiresWaveformProcessing =
 		mediaType === 'audio' && uploadData.ptt === true && typeof uploadData.waveform === 'undefined'
-	const requiresAudioBackground = options.backgroundColor && mediaType === 'audio' && uploadData.ptt === true
+	const requiresAudioBackground = (options.backgroundColor || (uploadData as any)?.backgroundArgb) && mediaType === 'audio' && uploadData.ptt === true
 	const requiresOriginalForSomeProcessing =
 		requiresDurationComputation || requiresThumbnailComputation || requiresWaveformProcessing
 	const { mediaKey, encFilePath, originalFilePath, fileEncSha256, fileSha256, fileLength } = await encryptedStream(
@@ -293,7 +293,7 @@ export const prepareWAMessageMedia = async (
 				}
 
 				if (requiresAudioBackground) {
-					uploadData.backgroundArgb = await assertColor(options.backgroundColor)
+					uploadData.backgroundArgb = await assertColor(options.backgroundColor || (uploadData as any)?.backgroundArgb)
 					logger?.debug('computed backgroundColor audio status')
 				}
 			} catch (error) {
@@ -697,10 +697,30 @@ export const generateWAMessageContent = async (
 
 		if (options.backgroundColor) {
 			extContent.backgroundArgb = await assertColor(options.backgroundColor)
+		} else if ((message as any).backgroundArgb) {
+			extContent.backgroundArgb = (message as any).backgroundArgb
 		}
 
 		if (options.font) {
 			extContent.font = options.font
+		} else if ((message as any).font) {
+			extContent.font = (message as any).font
+		}
+
+		if ((message as any).title) {
+			extContent.title = (message as any).title
+		}
+
+		if ((message as any).jpegThumbnail) {
+			extContent.jpegThumbnail = (message as any).jpegThumbnail
+		}
+
+		if ((message as any).inviteLinkParentGroupSubjectV2) {
+			extContent.inviteLinkParentGroupSubjectV2 = (message as any).inviteLinkParentGroupSubjectV2
+		}
+
+		if ((message as any).inviteLinkParentGroupThumbnailV2) {
+			extContent.inviteLinkParentGroupThumbnailV2 = (message as any).inviteLinkParentGroupThumbnailV2
 		}
 
 		m.extendedTextMessage = extContent

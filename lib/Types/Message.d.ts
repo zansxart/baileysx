@@ -244,6 +244,7 @@ export type AnyMessageContent = (AnyRegularMessageContent | {
     limitSharing: boolean;
 } | {
     groupStatusMessage?: any;
+    groupStatusMessageV2?: any;
     groupStatus?: boolean;
 }) & {
     mentionAll?: boolean;
