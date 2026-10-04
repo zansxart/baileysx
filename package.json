@@ -4,7 +4,7 @@
     "access": "public"
   },
   "type": "module",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "A WebSockets library for interacting with WhatsApp Web (custom fork by zansxart)",
   "keywords": [
     "whatsapp",
