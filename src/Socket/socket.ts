@@ -158,6 +158,7 @@ export const makeSocket = (config: SocketConfig) => {
 	/** send a binary node */
 	const sendNode = (frame: BinaryNode) => {
 		if (logger.level === 'trace') {
+
 			logger.trace({ xml: binaryNodeToString(frame), msg: 'xml send' })
 		}
 

@@ -691,6 +691,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 		const meId = assertMeId(authState.creds)
 		const meLid = authState.creds.me?.lid
+		const { user: mePnUser } = jidDecode(meId)!
+		const { user: meLidUser } = meLid ? jidDecode(meLid)! : { user: null }
 		const isRetryResend = Boolean(participant?.jid)
 		let shouldIncludeDeviceIdentity = isRetryResend
 		const statusJid = 'status@broadcast'
@@ -808,7 +810,25 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				}
 
 				if (isStatus && statusJidList) {
-					participantsList.push(...statusJidList)
+					const seenUsers = new Set<string>()
+					for (const rawJid of statusJidList) {
+						if (!rawJid || typeof rawJid !== 'string') continue
+						const decoded = jidDecode(rawJid)
+						if (!decoded || !decoded.user) continue
+						// Status broadcast participants MUST be PN users (@s.whatsapp.net)
+						if (decoded.server !== 's.whatsapp.net') continue
+						// Skip own device / own LID
+						if (decoded.user === mePnUser || (meLidUser && decoded.user === meLidUser)) continue
+						// Filter out LIDs misidentified as PNs (WhatsApp LIDs are 14-16 digits, phone numbers in E.164 are usually <= 13 digits, except 62 which is 11-14)
+						if (decoded.user.length >= 14 && !decoded.user.startsWith('62')) continue
+						if (!/^\d{7,15}$/.test(decoded.user)) continue
+
+						const normalized = jidNormalizedUser(rawJid)
+						if (!seenUsers.has(normalized)) {
+							seenUsers.add(normalized)
+							participantsList.push(normalized)
+						}
+					}
 				}
 
 				const additionalDevices = await getUSyncDevices(participantsList, !!useUserDevicesCache, false)
@@ -841,13 +861,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				for (const device of devices) {
 					const deviceJid = device.jid
 					const hasKey = !!senderKeyMap[deviceJid]
+					const isOwnDevice = device.user === mePnUser || (meLidUser && device.user === meLidUser)
 					if (
 						(!hasKey || !!participant) &&
 						!isHostedLidUser(deviceJid) &&
 						!isHostedPnUser(deviceJid) &&
 						device.device !== 99 &&
-						deviceJid !== meId &&
-						(!meLid || deviceJid !== meLid)
+						(isStatus ? !isOwnDevice : (deviceJid !== meId && (!meLid || deviceJid !== meLid)))
 					) {
 						//todo: revamp all this logic
 						// the goal is to follow with what I said above for each group, and instead of a true false map of ids, we can set an array full of those the app has already sent pkmsgs
@@ -874,6 +894,20 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 					participants.push(...result.nodes)
 				}
+
+				if (isStatus) {
+					logger.debug({
+						jid,
+						destinationJid,
+						participantsListCount: participantsList.length,
+						devicesFound: devices.length,
+						senderKeyRecipientsCount: senderKeyRecipients.length,
+						participantsNodesCount: participants.length,
+						groupAddressingMode,
+						groupSenderIdentity
+					}, 'status broadcast relay info')
+				}
+
 
 				binaryNodeContent.push({
 					tag: 'enc',
@@ -947,8 +981,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const allRecipients: string[] = []
 				const meRecipients: string[] = []
 				const otherRecipients: string[] = []
-				const { user: mePnUser } = jidDecode(meId)!
-				const { user: meLidUser } = meLid ? jidDecode(meLid)! : { user: null }
 
 				for (const { user, jid } of devices) {
 					const isExactSenderDevice = jid === meId || (meLid && jid === meLid)

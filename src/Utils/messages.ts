@@ -1253,7 +1253,7 @@ export const generateWAMessageFromContent = (
 		key = 'extendedTextMessage'
 	}
 
-	if (quoted && !isJidNewsletter(jid)) {
+	if (quoted?.key && !isJidNewsletter(jid)) {
 		const participant = quoted.key.fromMe
 			? userJid // TODO: Add support for LIDs
 			: quoted.participant || quoted.key.participant || quoted.key.remoteJid

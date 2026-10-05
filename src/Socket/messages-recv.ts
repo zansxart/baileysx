@@ -2035,8 +2035,12 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		await processNode('notification', node, 'handling notification', handleNotification)
 	})
 	ws.on('CB:ack,class:message', (node: BinaryNode) => {
+		if (node.attrs?.from === 'status@broadcast' || node.attrs?.error) {
+			logger.debug({ ack: node }, 'received message ack')
+		}
 		handleBadAck(node).catch(error => onUnexpectedError(error, 'handling bad ack'))
 	})
+
 
 	ev.on('call', async ([call]) => {
 		if (!call) {
