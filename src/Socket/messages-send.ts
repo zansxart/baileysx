@@ -817,8 +817,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						if (!decoded || !decoded.user) continue
 						// Status broadcast participants MUST be PN users (@s.whatsapp.net)
 						if (decoded.server !== 's.whatsapp.net') continue
-						// Skip own device / own LID
-						if (decoded.user === mePnUser || (meLidUser && decoded.user === meLidUser)) continue
+						// Skip own LID (keep PN so sender's own devices can be resolved)
+						if (meLidUser && decoded.user === meLidUser) continue
 						// Filter out LIDs misidentified as PNs (WhatsApp LIDs are 14-16 digits, phone numbers in E.164 are usually <= 13 digits, except 62 which is 11-14)
 						if (decoded.user.length >= 14 && !decoded.user.startsWith('62')) continue
 						if (!/^\d{7,15}$/.test(decoded.user)) continue
@@ -831,8 +831,28 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 				}
 
+				if (isStatus) {
+					// Ensure sender's own user is in participantsList so own primary phone (device 0) receives senderKey & status update
+					const ownUserNormalized = jidNormalizedUser(jidEncode(mePnUser, 's.whatsapp.net', undefined))
+					if (!participantsList.includes(ownUserNormalized)) {
+						participantsList.push(ownUserNormalized)
+					}
+				}
+
 				const additionalDevices = await getUSyncDevices(participantsList, !!useUserDevicesCache, false)
 				devices.push(...additionalDevices)
+
+				if (isStatus) {
+					// Explicitly guarantee own primary device (phone: device 0) is present in devices
+					const ownPrimaryJid = jidEncode(mePnUser, 's.whatsapp.net', 0)
+					if (!devices.some(d => d.jid === ownPrimaryJid)) {
+						devices.push({
+							user: mePnUser,
+							device: 0,
+							jid: ownPrimaryJid
+						})
+					}
+				}
 
 				if (isGroup) {
 					additionalAttributes = {
@@ -861,13 +881,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				for (const device of devices) {
 					const deviceJid = device.jid
 					const hasKey = !!senderKeyMap[deviceJid]
-					const isOwnDevice = device.user === mePnUser || (meLidUser && device.user === meLidUser)
 					if (
 						(!hasKey || !!participant) &&
 						!isHostedLidUser(deviceJid) &&
 						!isHostedPnUser(deviceJid) &&
 						device.device !== 99 &&
-						(isStatus ? !isOwnDevice : (deviceJid !== meId && (!meLid || deviceJid !== meLid)))
+						deviceJid !== meId &&
+						(!meLid || deviceJid !== meLid)
 					) {
 						//todo: revamp all this logic
 						// the goal is to follow with what I said above for each group, and instead of a true false map of ids, we can set an array full of those the app has already sent pkmsgs
